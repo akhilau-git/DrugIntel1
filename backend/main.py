@@ -1,17 +1,11 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+import importlib
 import logging, time, asyncio
 from typing import Optional, List
 from pydantic import BaseModel
 
-from modules.smiles_parser import router as mol_router
-from modules.drug_interaction import router as ddi_router
-from modules.tlc_simulator import router as tlc_router
-from modules.purity_checker import router as purity_router
-from modules.dosage_calculator import router as dosage_router
-from modules.discovery_pipeline import router as discovery_router
-from modules.pubchem_fetcher import router as pubchem_router
 from database.db import create_tables
 
 logging.basicConfig(level=logging.INFO)
@@ -55,18 +49,26 @@ async def global_exception(request: Request, exc: Exception):
     logger.error(f"Unhandled error: {exc}")
     return JSONResponse(status_code=500, content={"error": str(exc), "path": str(request.url)})
 
-app.include_router(mol_router,       prefix="/api/molecule",   tags=["Molecule Analysis"])
-app.include_router(ddi_router,       prefix="/api/interaction", tags=["Drug Interactions"])
-app.include_router(tlc_router,       prefix="/api/tlc",         tags=["TLC Simulation"])
-app.include_router(purity_router,    prefix="/api/purity",      tags=["Purity & Quality"])
-app.include_router(dosage_router,    prefix="/api/dosage",      tags=["Dosage"])
-app.include_router(discovery_router, prefix="/api/discovery",   tags=["Discovery Pipeline"])
-app.include_router(pubchem_router,   prefix="/api/pubchem",     tags=["External Data"])
+def include_optional_router(module_path: str, router_name: str, *, prefix: str, tags: list[str]) -> None:
+    try:
+        module = importlib.import_module(module_path)
+        app.include_router(getattr(module, router_name), prefix=prefix, tags=tags)
+    except Exception as exc:
+        logger.warning(f"Skipping optional router {module_path}.{router_name}: {exc}")
+
+
+include_optional_router("modules.smiles_parser", "router", prefix="/api/molecule", tags=["Molecule Analysis"])
+include_optional_router("modules.drug_interaction", "router", prefix="/api/interaction", tags=["Drug Interactions"])
+include_optional_router("modules.tlc_simulator", "router", prefix="/api/tlc", tags=["TLC Simulation"])
+include_optional_router("modules.purity_checker", "router", prefix="/api/purity", tags=["Purity & Quality"])
+include_optional_router("modules.dosage_calculator", "router", prefix="/api/dosage", tags=["Dosage"])
+include_optional_router("modules.discovery_pipeline", "router", prefix="/api/discovery", tags=["Discovery Pipeline"])
+include_optional_router("modules.pubchem_fetcher", "router", prefix="/api/pubchem", tags=["External Data"])
 
 # Security & RBAC - Comprehensive Authentication
 try:
     from auth_v2 import router as auth_router, require_role, get_current_user
-    from modules.patient_profile import router as patient_router
+    from patient_profile import router as patient_router
     app.include_router(auth_router)
     app.include_router(patient_router)
     

@@ -57,6 +57,11 @@ class UserSignupRequest(BaseModel):
     role: models.UserRole = models.UserRole.PATIENT
     organization: Optional[str]
     industry: Optional[str]
+    institution_email: Optional[EmailStr] = None
+    institution_name: Optional[str] = None
+    license_number: Optional[str] = None
+    employee_id: Optional[str] = None
+    orcid: Optional[str] = None
 
 class GoogleOAuthRequest(BaseModel):
     token: str  # Google ID token
@@ -405,6 +410,11 @@ async def signup(
             user_id=user.id,
             email=signup_data.email,
             role=signup_data.role,
+            license_number=signup_data.license_number,
+            institution_email=signup_data.institution_email,
+            institution_name=signup_data.institution_name or signup_data.organization,
+            employee_id=signup_data.employee_id,
+            orcid=signup_data.orcid,
             status=models.VerificationStatus.PENDING
         )
         db.add(verification)
@@ -628,7 +638,23 @@ async def submit_verification(
     if verification:
         verification.status = models.VerificationStatus.PENDING
         verification.license_number = documents.get("license_number")
-        verification.institution_name = documents.get("institution")
+        verification.institution_email = documents.get("institution_email")
+        verification.institution_name = documents.get("institution_name") or documents.get("institution")
+        verification.employee_id = documents.get("employee_id")
+        verification.orcid = documents.get("orcid")
+    else:
+        verification = models.Verification(
+            user_id=current_user.id,
+            email=current_user.email,
+            role=current_user.role,
+            status=models.VerificationStatus.PENDING,
+            license_number=documents.get("license_number"),
+            institution_email=documents.get("institution_email"),
+            institution_name=documents.get("institution_name") or documents.get("institution"),
+            employee_id=documents.get("employee_id"),
+            orcid=documents.get("orcid")
+        )
+        db.add(verification)
     
     db.commit()
     
@@ -637,6 +663,77 @@ async def submit_verification(
                        str(verification.id), "success", None, request)
     
     return {"message": "Verification documents submitted", "verification_id": verification.id}
+
+@router.get("/verification/queue")
+async def list_verification_queue(
+    current_user: models.User = Depends(require_role(models.UserRole.ADMIN)),
+    db: Session = Depends(get_db)
+):
+    """List all verification requests for admin review"""
+    queue = db.query(models.Verification).order_by(models.Verification.created_at.desc()).all()
+    return [
+        {
+            "id": item.id,
+            "user_id": item.user_id,
+            "email": item.email,
+            "role": item.role,
+            "license_number": item.license_number,
+            "institution_email": item.institution_email,
+            "institution_name": item.institution_name,
+            "employee_id": item.employee_id,
+            "orcid": item.orcid,
+            "status": item.status,
+            "reviewer_notes": item.reviewer_notes,
+            "created_at": item.created_at,
+            "updated_at": item.updated_at,
+            "completed_at": item.completed_at
+        }
+        for item in queue
+    ]
+
+@router.patch("/verification/queue/{verification_id}")
+async def review_verification_request(
+    verification_id: int,
+    payload: Dict,
+    current_user: models.User = Depends(require_role(models.UserRole.ADMIN)),
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    """Approve, reject, or mark verification requests as needing info"""
+    verification = db.query(models.Verification).filter(models.Verification.id == verification_id).first()
+    if not verification:
+        raise HTTPException(status_code=404, detail="Verification request not found")
+
+    status_value = (payload.get("status") or "").lower()
+    notes = payload.get("reviewer_notes")
+
+    if status_value not in {"approved", "rejected", "needs_info"}:
+        raise HTTPException(status_code=400, detail="Invalid verification status")
+
+    verification.status = models.VerificationStatus(status_value)
+    verification.reviewer_notes = notes
+    verification.reviewer_id = current_user.id
+    verification.completed_at = datetime.utcnow() if status_value == "approved" else None
+
+    user = db.query(models.User).filter(models.User.id == verification.user_id).first()
+    if user:
+        user.is_verified = status_value == "approved"
+
+    db.commit()
+
+    if request:
+        await log_audit(
+            db,
+            current_user.id,
+            "VERIFICATION_REVIEWED",
+            "verification",
+            str(verification.id),
+            "success",
+            {"status": status_value, "notes": notes},
+            request,
+        )
+
+    return {"message": "Verification updated", "verification_id": verification.id, "status": verification.status}
 
 @router.get("/me")
 async def get_current_user_profile(

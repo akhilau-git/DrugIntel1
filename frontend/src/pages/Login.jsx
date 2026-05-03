@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import axios from 'axios'
+import OnboardingModal from '../components/OnboardingModal'
 
 const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
 export default function Login({ onLoginSuccess }) {
     const [view, setView] = useState('login')
+    const [showOnboarding, setShowOnboarding] = useState(false)
+    const [currentUser, setCurrentUser] = useState(null)
     const isSignUp = view === 'signup'
     const isForgot = view === 'forgot'
     
@@ -17,6 +20,12 @@ export default function Login({ onLoginSuccess }) {
     const [email, setEmail] = useState('')
     const [organization, setOrganization] = useState('')
     const [industry, setIndustry] = useState('')
+    const [signupRole, setSignupRole] = useState('patient')
+    const [institutionEmail, setInstitutionEmail] = useState('')
+    const [institutionName, setInstitutionName] = useState('')
+    const [licenseNumber, setLicenseNumber] = useState('')
+    const [employeeId, setEmployeeId] = useState('')
+    const [orcid, setOrcid] = useState('')
 
     const [error, setError] = useState(null)
     const [success, setSuccess] = useState(null)
@@ -31,8 +40,47 @@ export default function Login({ onLoginSuccess }) {
         setEmail('')
         setOrganization('')
         setIndustry('')
+        setSignupRole('patient')
+        setInstitutionEmail('')
+        setInstitutionName('')
+        setLicenseNumber('')
+        setEmployeeId('')
+        setOrcid('')
         setError(null)
         setSuccess(null)
+    }
+
+    const handleLoginSuccess = (userData) => {
+        // Check if profile is complete
+        if (userData.profile_complete === false) {
+            setCurrentUser(userData)
+            setShowOnboarding(true)
+        } else {
+            // Profile already complete, proceed to dashboard
+            onLoginSuccess(userData)
+        }
+    }
+
+    const handleOnboardingComplete = () => {
+        // After onboarding is done, proceed to dashboard
+        onLoginSuccess({
+            token: currentUser.token,
+            role: currentUser.role,
+            full_name: currentUser.full_name,
+            user_id: currentUser.user_id,
+            profile_complete: true
+        })
+    }
+
+    const handleOnboardingSkip = () => {
+        // User can skip onboarding and proceed anyway
+        onLoginSuccess({
+            token: currentUser.token,
+            role: currentUser.role,
+            full_name: currentUser.full_name,
+            user_id: currentUser.user_id,
+            profile_complete: false
+        })
     }
 
     const handleGoogleLogin = async () => {
@@ -52,11 +100,12 @@ export default function Login({ onLoginSuccess }) {
                 device_name: "Web Browser"
             })
             
-            onLoginSuccess({
+            handleLoginSuccess({
                 token: res.data.access_token,
                 role: res.data.role,
                 full_name: res.data.full_name,
-                user_id: res.data.user_id
+                user_id: res.data.user_id,
+                profile_complete: res.data.profile_complete
             })
         } catch (err) {
             setError(err.response?.data?.detail || "Google login failed. Try email/password instead.")
@@ -100,10 +149,17 @@ export default function Login({ onLoginSuccess }) {
                     mobile: '+1234567890',
                     organization, 
                     industry, 
-                    role: 'patient'
+                    role: signupRole,
+                    institution_email: institutionEmail || undefined,
+                    institution_name: institutionName || organization || undefined,
+                    license_number: licenseNumber || undefined,
+                    employee_id: employeeId || undefined,
+                    orcid: orcid || undefined
                 })
                 toggleView('login')
-                setSuccess("✅ Registration successful. Please log in.")
+                setSuccess(signupRole === 'patient'
+                    ? "✅ Patient registration successful. Please log in."
+                    : "✅ Professional registration created. Submit verification documents to activate your account.")
             } else {
                 if (!username || !password) { setError("Please enter email and password."); setLoading(false); return; }
                 
@@ -112,11 +168,12 @@ export default function Login({ onLoginSuccess }) {
                     password: password
                 })
                 
-                onLoginSuccess({
+                handleLoginSuccess({
                     token: res.data.access_token,
                     role: res.data.role,
                     full_name: res.data.full_name,
-                    user_id: res.data.user_id
+                    user_id: res.data.user_id,
+                    profile_complete: res.data.profile_complete
                 })
             }
         } catch (err) {
@@ -126,6 +183,14 @@ export default function Login({ onLoginSuccess }) {
     }
 
     return (
+        <>
+            {showOnboarding && currentUser && (
+                <OnboardingModal
+                    user={currentUser}
+                    onComplete={handleOnboardingComplete}
+                    onSkip={handleOnboardingSkip}
+                />
+            )}
         <div style={{
             height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column',
             background: `linear-gradient(rgba(6, 17, 37, 0.5), rgba(6, 17, 37, 0.7)), url('/login-bg-3.png') center/cover no-repeat, #061125`,
@@ -178,6 +243,17 @@ export default function Login({ onLoginSuccess }) {
                             <>
                                 <InputBox icon="user" placeholder="Full Name" value={fullName} onChange={e => setFullName(e.target.value)} />
                                 <InputBox icon="mail" type="email" placeholder="Official Email" value={email} onChange={e => setEmail(e.target.value)} />
+                                <div style={{ position: 'relative' }}>
+                                    <select value={signupRole} onChange={e => setSignupRole(e.target.value)} style={{...inputStyle, paddingLeft: 16}} required>
+                                        <option value="patient" style={{ background: '#0f172a', color: '#fff' }}>Patient</option>
+                                        <option value="doctor" style={{ background: '#0f172a', color: '#fff' }}>Doctor</option>
+                                        <option value="pharmacist" style={{ background: '#0f172a', color: '#fff' }}>Pharmacist</option>
+                                        <option value="chemist" style={{ background: '#0f172a', color: '#fff' }}>Chemist</option>
+                                        <option value="research_scientist" style={{ background: '#0f172a', color: '#fff' }}>Research Scientist</option>
+                                        <option value="auditor" style={{ background: '#0f172a', color: '#fff' }}>Auditor</option>
+                                        <option value="admin" style={{ background: '#0f172a', color: '#fff' }}>Admin</option>
+                                    </select>
+                                </div>
                                 <InputBox icon="building" placeholder="Organization / Institution Name" value={organization} onChange={e => setOrganization(e.target.value)} />
                                 <div style={{ position: 'relative' }}>
                                     <select value={industry} onChange={e => setIndustry(e.target.value)} style={{...inputStyle, paddingLeft: 16}} required>
@@ -187,6 +263,16 @@ export default function Login({ onLoginSuccess }) {
                                         <option value="gov" style={{ background: '#0f172a', color: '#fff' }}>Gov Auditor / Regulator</option>
                                     </select>
                                 </div>
+                                {signupRole !== 'patient' && (
+                                    <>
+                                        <InputBox icon="mail" type="email" placeholder="Institutional Email" value={institutionEmail} onChange={e => setInstitutionEmail(e.target.value)} />
+                                        <InputBox icon="building" placeholder="Institution Name" value={institutionName} onChange={e => setInstitutionName(e.target.value)} />
+                                        <InputBox icon="user" placeholder={signupRole === 'research_scientist' ? 'ORCID' : 'License Number'} value={signupRole === 'research_scientist' ? orcid : licenseNumber} onChange={e => signupRole === 'research_scientist' ? setOrcid(e.target.value) : setLicenseNumber(e.target.value)} />
+                                        {(signupRole === 'doctor' || signupRole === 'pharmacist' || signupRole === 'chemist' || signupRole === 'auditor' || signupRole === 'admin') && (
+                                            <InputBox icon="user" placeholder="Employee / Registry ID (optional)" value={employeeId} onChange={e => setEmployeeId(e.target.value)} />
+                                        )}
+                                    </>
+                                )}
                             </>
                         )}
                         {isForgot ? (
@@ -296,6 +382,7 @@ export default function Login({ onLoginSuccess }) {
                 <span>Secure Access • GMP Compliant</span>
             </div>
         </div>
+        </>
     )
 }
 
