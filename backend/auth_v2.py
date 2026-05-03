@@ -45,8 +45,8 @@ class TokenResponse(BaseModel):
 class UserLoginRequest(BaseModel):
     email: str
     password: str
-    device_id: Optional[str]
-    device_name: Optional[str]
+    device_id: Optional[str] = None
+    device_name: Optional[str] = None
     remember_me: bool = False
 
 class UserSignupRequest(BaseModel):
@@ -245,7 +245,7 @@ async def login(
         )
     
     # Create tokens
-    access_token = create_token({"sub": user.id, "email": user.email})
+    access_token = create_token({"sub": user.id, "email": user.email}, token_type="access")
     refresh_token = create_token({"sub": user.id, "email": user.email}, token_type="refresh")
     
     # Create session if device_id provided
@@ -346,7 +346,7 @@ async def google_oauth_login(
         raise HTTPException(status_code=403, detail="Account is inactive")
     
     # Create tokens
-    access_token = create_token({"sub": user.id, "email": user.email})
+    access_token = create_token({"sub": user.id, "email": user.email}, token_type="access")
     refresh_token = create_token({"sub": user.id, "email": user.email}, token_type="refresh")
     
     # Update last login
@@ -527,7 +527,7 @@ async def refresh_access_token(
         raise HTTPException(status_code=401, detail="User not found or inactive")
     
     # Create new access token
-    access_token = create_token({"sub": user.id, "email": user.email})
+    access_token = create_token({"sub": user.id, "email": user.email}, token_type="access")
     
     return {
         "access_token": access_token,

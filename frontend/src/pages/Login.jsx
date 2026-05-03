@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import axios from 'axios'
 
-const API = import.meta.env.VITE_API_URL || '/api';
+const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
 export default function Login({ onLoginSuccess }) {
     const [view, setView] = useState('login')
@@ -35,6 +35,35 @@ export default function Login({ onLoginSuccess }) {
         setSuccess(null)
     }
 
+    const handleGoogleLogin = async () => {
+        setError(null)
+        setLoading(true)
+        try {
+            // Simulate Google OAuth popup — in production, integrate with @react-oauth/google
+            const mockGoogleToken = prompt("Paste your Google ID token here (for demo, use any non-empty string):")
+            if (!mockGoogleToken) {
+                setLoading(false)
+                return
+            }
+            
+            const res = await axios.post(`${API}/api/v1/auth/oauth/google`, {
+                token: mockGoogleToken,
+                device_id: "browser-google-" + Date.now(),
+                device_name: "Web Browser"
+            })
+            
+            onLoginSuccess({
+                token: res.data.access_token,
+                role: res.data.role,
+                full_name: res.data.full_name,
+                user_id: res.data.user_id
+            })
+        } catch (err) {
+            setError(err.response?.data?.detail || "Google login failed. Try email/password instead.")
+        }
+        setLoading(false)
+    }
+
     const handleSubmit = async (e) => {
         e.preventDefault()
         setError(null)
@@ -43,18 +72,13 @@ export default function Login({ onLoginSuccess }) {
 
         try {
             if (isForgot) {
-                if (!username || !password) { setError("Please enter your email/username and a new password."); setLoading(false); return; }
-                if (password.length < 8) { setError("Security Error: Password must be at least 8 characters long."); setLoading(false); return; }
-                if (!/[A-Z]/.test(password)) { setError("Security Error: Password must contain at least one uppercase letter."); setLoading(false); return; }
-                if (!/[a-z]/.test(password)) { setError("Security Error: Password must contain at least one lowercase letter."); setLoading(false); return; }
-                if (!/[0-9]/.test(password)) { setError("Security Error: Password must contain at least one number."); setLoading(false); return; }
+                if (!username) { setError("Please enter your email."); setLoading(false); return; }
                 
-                await axios.post(`${API}/auth/reset-password`, {
-                    username_or_email: username,
-                    new_password: password
+                await axios.post(`${API}/api/v1/auth/forgot-password`, {
+                    email: username
                 })
                 
-                setSuccess("✅ Password reset successfully. Please log in with your new password.")
+                setSuccess("✅ OTP sent to your email. Please check and follow the reset link.")
                 setUsername('')
                 setPassword('')
                 setLoading(false)
@@ -69,26 +93,30 @@ export default function Login({ onLoginSuccess }) {
                 if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) { setError("Security Error: Password must contain at least one special character."); setLoading(false); return; }
                 if (password !== confirmPassword) { setError("Passwords do not match. Please try again."); setLoading(false); return; }
                 
-                await axios.post(`${API}/auth/register`, {
-                    username, password, full_name: fullName, 
-                    email, organization, industry, role: industry === 'gov' ? 'auditor' : 'chemist'
+                await axios.post(`${API}/api/v1/auth/signup`, {
+                    full_name: fullName, 
+                    email, 
+                    password,
+                    mobile: '+1234567890',
+                    organization, 
+                    industry, 
+                    role: 'patient'
                 })
                 toggleView('login')
-                setSuccess("Registration successful. Please log in.")
+                setSuccess("✅ Registration successful. Please log in.")
             } else {
-                const formData = new URLSearchParams()
-                formData.append('username', username)
-                formData.append('password', password)
+                if (!username || !password) { setError("Please enter email and password."); setLoading(false); return; }
                 
-                const res = await axios.post(`${API}/auth/login`, formData, {
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                const res = await axios.post(`${API}/api/v1/auth/login`, {
+                    email: username,
+                    password: password
                 })
                 
                 onLoginSuccess({
                     token: res.data.access_token,
                     role: res.data.role,
                     full_name: res.data.full_name,
-                    industry: res.data.industry
+                    user_id: res.data.user_id
                 })
             }
         } catch (err) {
@@ -202,6 +230,39 @@ export default function Login({ onLoginSuccess }) {
                         >
                             {loading ? (isForgot ? 'Resetting...' : 'Authenticating...') : isSignUp ? 'Submit Registration' : isForgot ? 'Set New Password' : 'Log In'}
                         </button>
+
+                        {/* Google Sign-In Button — Only show on login view */}
+                        {!isSignUp && !isForgot && (
+                            <>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16, marginBottom: 8 }}>
+                                    <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.2)' }} />
+                                    <span style={{ color: '#cbd5e1', fontSize: 13, fontWeight: 500 }}>or</span>
+                                    <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.2)' }} />
+                                </div>
+                                <button type="button" onClick={handleGoogleLogin} disabled={loading} style={{
+                                    width: '100%', padding: '12px', marginTop: 4,
+                                    background: 'linear-gradient(180deg, #f3f4f6 0%, #ffffff 100%)',
+                                    border: '1px solid rgba(0, 0, 0, 0.2)',
+                                    borderRadius: 4, color: '#1f2937', fontSize: 16, fontWeight: 700,
+                                    cursor: loading ? 'not-allowed' : 'pointer',
+                                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                                    transition: 'transform 0.1s'
+                                }}
+                                onMouseDown={e => e.currentTarget.style.transform = 'scale(0.98)'}
+                                onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
+                                >
+                                    <svg width="20" height="20" viewBox="0 0 48 48" fill="none">
+                                        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19c1.75-4.9 6.38-8.41 11.46-8.41z"/>
+                                        <path fill="#4285F4" d="M23.99 44.5c6.47 0 11.9-2.38 15.89-6.84l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.05 0-11.25-4.03-13.06-9.42l-8.1 6.28C6.51 39.62 14.62 44.5 23.99 44.5z"/>
+                                        <path fill="#FBBC05" d="M9.58 29.24c-.77-2.46-1.2-5.09-1.2-7.74 0-2.65.43-5.28 1.2-7.74l-8.1-6.28C.92 10.9 0 17.43 0 24s.92 13.1 2.56 19.26l7.98-6.02z"/>
+                                        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-6.84l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.05 0-11.25-4.03-13.06-9.42l-8.1 6.28c3.88 7.78 11.95 13.68 21.16 13.68z"/>
+                                        <path fill="none" d="M0 0h48v48H0z"/>
+                                    </svg>
+                                    Sign in with Google
+                                </button>
+                            </>
+                        )}
                     </form>
                 </div>
                 
