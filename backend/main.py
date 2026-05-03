@@ -63,16 +63,18 @@ app.include_router(dosage_router,    prefix="/api/dosage",      tags=["Dosage"])
 app.include_router(discovery_router, prefix="/api/discovery",   tags=["Discovery Pipeline"])
 app.include_router(pubchem_router,   prefix="/api/pubchem",     tags=["External Data"])
 
-# Security & RBAC Phase 1
+# Security & RBAC - Comprehensive Authentication
 try:
-    from auth import router as auth_router, require_role
-    app.include_router(auth_router, prefix="/api")
+    from auth_v2 import router as auth_router, require_role, get_current_user
+    from modules.patient_profile import router as patient_router
+    app.include_router(auth_router)
+    app.include_router(patient_router)
     
     # RAG Chat Phase 2
     from modules.rag_chat import router as rag_router
     app.include_router(rag_router, prefix="/api/rag", tags=["Enterprise RAG"])
 except ImportError as e:
-    logger.warning(f"auth.py or rag_chat.py dependencies failed to load: {e}")
+    logger.warning(f"auth_v2.py or patient_profile.py dependencies failed to load: {e}")
 
 from pydantic import BaseModel
 
