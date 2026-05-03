@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.backend
+    container_name: drugintel-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://drugintel:securepass123@db:5432/drugintel
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    networks:
+      - drugintel-net
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+    container_name: drugintel-frontend
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_URL=http://localhost:8000/api
+    depends_on:
+      - backend
+    networks:
+      - drugintel-net
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    container_name: drugintel-db
+    environment:
+      POSTGRES_USER: drugintel
+      POSTGRES_PASSWORD: securepass123
+      POSTGRES_DB: drugintel
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - drugintel-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drugintel"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+
+networks:
+  drugintel-net:
+    driver: bridge
