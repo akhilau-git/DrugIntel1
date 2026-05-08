@@ -24,6 +24,13 @@ export async function fetchLastModelRun(patientId) {
   return null;
 }
 
+// ── Cardio Diagnostics ──────────────────────────────────────────
+export async function predictCardio(payload) {
+  // Route goes to our main app, not the v1 prefix since it's added via main.py directly
+  const { data } = await axios.post(`${API_BASE}/api/cardio/predict`, payload);
+  return data;
+}
+
 // ── DDI Check ────────────────────────────────────────────────
 export async function runDDICheck({ patientId, medications }) {
   const { data } = await client.post('/ddi/check', {

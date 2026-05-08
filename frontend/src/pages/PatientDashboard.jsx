@@ -15,7 +15,7 @@ import HistoryList from './patient/HistoryList';
 import ShareModal from './patient/ShareModal';
 
 // API service
-import { runDDICheck } from '../services/api';
+import { runDDICheck, predictCardio } from '../services/api';
 
 export default function PatientDashboard({ userProfile, onLogout }) {
   // ── State ──────────────────────────────────────────────────
@@ -34,20 +34,20 @@ export default function PatientDashboard({ userProfile, onLogout }) {
   // ── Handlers ───────────────────────────────────────────────
   async function handlePredict(data) {
     setLoading(true);
+    setDiagnosisResult(null);
     try {
-      // Simulate API call to dynamic model router
-      setTimeout(() => {
-        setDiagnosisResult({
-          prediction: 'Likely Atrial Fibrillation (AFib)',
-          confidence: 0.94,
-          model_used: 'XGBoost + GNN Ensemble',
-          recommendations: ['Schedule ECG', 'Consult Cardiologist', 'Avoid high-sodium foods'],
-          warnings: ['High risk of blood clots due to age and symptoms']
-        });
-        setLoading(false);
-      }, 1500);
+      const result = await predictCardio(data);
+      setDiagnosisResult(result);
     } catch (err) {
       console.error(err);
+      setDiagnosisResult({
+        prediction: 'API connection failed',
+        confidence: 0,
+        model_used: 'None',
+        recommendations: ['Ensure backend is running on port 8000.'],
+        warnings: []
+      });
+    } finally {
       setLoading(false);
     }
   }

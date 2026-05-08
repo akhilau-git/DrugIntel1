@@ -183,9 +183,45 @@ def check_interaction(data: DDIInput):
             "management": management,
             "cyp_enzyme_warnings": cyp_warnings,
             "pharmacodynamic_interaction": pharmacodynamic,
+            "cardiovascular_toxicity": get_cardiovascular_toxicity(data.drug1_name, data.drug2_name),
+            "food_interactions": get_food_interactions(data.drug1_name, data.drug2_name),
             "recommendations": get_recommendations(risk)
         }
     }
+
+def get_cardiovascular_toxicity(name1, name2):
+    # Mock implementation of CV toxicity risk calculation
+    drugs = [str(name1).lower(), str(name2).lower()]
+    warnings = []
+    
+    # Simple rule base for demonstration
+    if any(d in ['aspirin', 'ibuprofen', 'diclofenac'] for d in drugs):
+        warnings.append("↑ Blood Pressure elevation risk")
+    if any(d in ['amiodarone', 'sotalol', 'fluoxetine', 'citalopram'] for d in drugs):
+        warnings.append("↑ QT Prolongation Risk (Arrhythmia)")
+    if any(d in ['metoprolol', 'amlodipine', 'diltiazem'] for d in drugs):
+        warnings.append("↓ Bradycardia / Hypotension Risk")
+        
+    if not warnings:
+        warnings.append("No immediate synergistic cardiovascular toxicity detected.")
+        
+    return warnings
+
+def get_food_interactions(name1, name2):
+    drugs = [str(name1).lower(), str(name2).lower()]
+    foods = []
+    
+    if any(d in ['simvastatin', 'atorvastatin', 'amiodarone', 'amlodipine'] for d in drugs):
+        foods.append("Avoid Grapefruit Juice (CYP3A4 inhibition)")
+    if any(d in ['warfarin'] for d in drugs):
+        foods.append("Maintain consistent Vitamin K intake (leafy greens)")
+    if any(d in ['metoprolol', 'ibuprofen', 'aspirin'] for d in drugs):
+        foods.append("Take with food to minimize GI distress")
+        
+    if not foods:
+        foods.append("No specific food interactions known.")
+        
+    return foods
 
 def predict_rule_based(fp1, fp2, sim):
     if sim > 0.8:
