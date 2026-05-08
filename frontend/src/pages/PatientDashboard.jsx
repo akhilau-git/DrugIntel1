@@ -14,6 +14,7 @@ import AlertsPanel from './patient/AlertsPanel';
 import HistoryList from './patient/HistoryList';
 import PrescriptionScanner from './patient/PrescriptionScanner';
 import ShareModal from './patient/ShareModal';
+import SecureChat from '../components/SecureChat';
 
 // API service
 import { runDDICheck, predictCardio } from '../services/api';
@@ -31,6 +32,7 @@ export default function PatientDashboard({ userProfile, onLogout }) {
   ]);
   const [shareOpen, setShareOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   // ── Handlers ───────────────────────────────────────────────
   async function handlePredict(data) {
@@ -232,7 +234,7 @@ export default function PatientDashboard({ userProfile, onLogout }) {
       <footer className="pd-footer">
         <div>Model v1.2 — last run 2026‑05‑03 12:34 UTC — Confidence: 0.87</div>
         <div className="pd-footer-links">
-          <a href="#">Contact Support</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); setChatOpen(true); }}>Contact Clinician (Live)</a>
           <a href="#">Privacy Policy</a>
           <span className="pd-gmp-badge">● GMP Compliant</span>
         </div>
@@ -245,6 +247,15 @@ export default function PatientDashboard({ userProfile, onLogout }) {
 
       {/* ═══ SHARE MODAL ═══ */}
       <ShareModal open={shareOpen} onClose={() => setShareOpen(false)} />
+
+      {/* ═══ SECURE CHAT ═══ */}
+      {chatOpen && (
+        <SecureChat 
+          userProfile={userProfile} 
+          recipientName="Dr. Sarah Connor (Cardiology)" 
+          onClose={() => setChatOpen(false)} 
+        />
+      )}
     </div>
   );
 }

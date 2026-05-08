@@ -96,6 +96,10 @@ try:
     # RAG Chat Phase 2
     from modules.rag_chat import router as rag_router
     app.include_router(rag_router, prefix="/api/rag", tags=["Enterprise RAG"])
+
+    # Phase 4: WebSockets for Real-Time Clinician Coordination
+    from modules.chat_ws import router as chat_ws_router
+    app.include_router(chat_ws_router, tags=["Secure Messaging"])
 except ImportError as e:
     logger.warning(f"Dependencies failed to load: {e}")
 

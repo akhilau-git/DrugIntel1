@@ -4,10 +4,12 @@ import './doctor/DoctorDashboard.css';
 import PatientList from './doctor/PatientList';
 import ClinicalPrescriptionPanel from './doctor/ClinicalPrescriptionPanel';
 import EmergencyAlerts from './doctor/EmergencyAlerts';
+import SecureChat from '../components/SecureChat';
 
 export default function DoctorDashboard({ userProfile, onLogout }) {
   const [activeTab, setActiveTab] = useState('patients');
   const [selectedPatient, setSelectedPatient] = useState(null);
+  const [chatOpen, setChatOpen] = useState(false);
 
   return (
     <div className="doc-root">
@@ -124,7 +126,9 @@ export default function DoctorDashboard({ userProfile, onLogout }) {
               <h2 className="doc-panel-title">Clinical Tools</h2>
             </div>
             <div className="doc-panel-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <button style={{ padding: 16, background: '#FFF', border: '1px solid #E2E8F0', borderRadius: 8, textAlign: 'left', cursor: 'pointer' }}>
+              <button 
+                onClick={() => setChatOpen(true)}
+                style={{ padding: 16, background: '#FFF', border: '1px solid #E2E8F0', borderRadius: 8, textAlign: 'left', cursor: 'pointer' }}>
                 <div style={{ fontWeight: 700, color: '#0F172A', fontSize: 13 }}>Send Secure Message</div>
                 <div style={{ fontSize: 11, color: '#64748B', marginTop: 4 }}>Contact patient directly via HIPAA-ready chat.</div>
               </button>
@@ -141,6 +145,15 @@ export default function DoctorDashboard({ userProfile, onLogout }) {
 
         </div>
       </main>
+
+      {/* ═══ SECURE CHAT ═══ */}
+      {chatOpen && (
+        <SecureChat 
+          userProfile={userProfile} 
+          recipientName={selectedPatient ? selectedPatient.name : "Unassigned Patient"} 
+          onClose={() => setChatOpen(false)} 
+        />
+      )}
     </div>
   );
 }
