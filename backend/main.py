@@ -82,6 +82,7 @@ include_optional_router("modules.dosage_calculator", "router", prefix="/api/dosa
 include_optional_router("modules.discovery_pipeline", "router", prefix="/api/discovery", tags=["Discovery Pipeline"])
 include_optional_router("modules.pubchem_fetcher", "router", prefix="/api/pubchem", tags=["External Data"])
 include_optional_router("modules.cardio_diagnostics", "router", prefix="/api/cardio", tags=["Cardio Diagnostics"])
+include_optional_router("modules.prescription_ocr", "router", prefix="/api/ocr", tags=["Document AI"])
 
 # Security & RBAC - Comprehensive Authentication
 try:

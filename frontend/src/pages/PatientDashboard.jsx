@@ -12,6 +12,7 @@ import DosingCard from './patient/DosingCard';
 import InteractionExplanation from './patient/InteractionExplanation';
 import AlertsPanel from './patient/AlertsPanel';
 import HistoryList from './patient/HistoryList';
+import PrescriptionScanner from './patient/PrescriptionScanner';
 import ShareModal from './patient/ShareModal';
 
 // API service
@@ -72,6 +73,22 @@ export default function PatientDashboard({ userProfile, onLogout }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleMedicationsExtracted(newMeds) {
+    const formatted = newMeds.map((m, i) => ({
+      id: Date.now() + i,
+      name: m.name,
+      dose: m.dosage,
+      frequency: m.frequency,
+      route: 'Oral', // Default
+      startDate: new Date().toISOString().split('T')[0]
+    }));
+    setMedications(prev => [...prev, ...formatted]);
+    setAlerts(prev => [
+      { id: Date.now(), severity: 'INFO', message: `Successfully extracted ${newMeds.length} medications via Document AI.` },
+      ...prev
+    ]);
   }
 
   function handleAcknowledge(id) {
@@ -171,6 +188,7 @@ export default function PatientDashboard({ userProfile, onLogout }) {
             />
             {diagnosisResult && <DiagnosticResultPanel result={diagnosisResult} />}
             <MedicationList items={medications} onAdd={() => {}} onRunCheck={handleRunCheck} />
+            <PrescriptionScanner onMedicationsExtracted={handleMedicationsExtracted} />
           </div>
 
           {/* ── CENTER COLUMN (flex) ── */}
