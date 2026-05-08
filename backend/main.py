@@ -44,6 +44,24 @@ async def startup():
     create_tables()
     logger.info("DrugIntel API started. Tables ready.")
 
+from fastapi.exceptions import RequestValidationError
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = {}
+    for err in exc.errors():
+        # Get the field name from the location (e.g. ['body', 'weight_kg'] -> 'weight_kg')
+        field = err["loc"][-1] if err["loc"] else "unknown"
+        errors[field] = err["msg"]
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "validation_error",
+            "details": errors,
+            "profile_complete": False
+        }
+    )
+
 @app.exception_handler(Exception)
 async def global_exception(request: Request, exc: Exception):
     logger.error(f"Unhandled error: {exc}")
@@ -69,14 +87,16 @@ include_optional_router("modules.pubchem_fetcher", "router", prefix="/api/pubche
 try:
     from auth_v2 import router as auth_router, require_role, get_current_user
     from patient_profile import router as patient_router
+    from modules.patient_ddi import router as patient_ddi_router
     app.include_router(auth_router)
     app.include_router(patient_router)
+    app.include_router(patient_ddi_router)
     
     # RAG Chat Phase 2
     from modules.rag_chat import router as rag_router
     app.include_router(rag_router, prefix="/api/rag", tags=["Enterprise RAG"])
 except ImportError as e:
-    logger.warning(f"auth_v2.py or patient_profile.py dependencies failed to load: {e}")
+    logger.warning(f"Dependencies failed to load: {e}")
 
 from pydantic import BaseModel
 

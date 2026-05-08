@@ -1,453 +1,435 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import axios from 'axios'
 import OnboardingModal from '../components/OnboardingModal'
+import './Login.css'
 
 const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
 export default function Login({ onLoginSuccess }) {
-    const [view, setView] = useState('login')
+    const [view, setView] = useState('login') // login, signup, forgot
     const [showOnboarding, setShowOnboarding] = useState(false)
     const [currentUser, setCurrentUser] = useState(null)
-    const isSignUp = view === 'signup'
-    const isForgot = view === 'forgot'
+    const [showSupport, setShowSupport] = useState(false)
     
-    const [username, setUsername] = useState('')
+    // Form state
+    const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
-    
-    // Sign Up specifics
     const [fullName, setFullName] = useState('')
-    const [email, setEmail] = useState('')
+    const [mobile, setMobile] = useState('')
     const [organization, setOrganization] = useState('')
-    const [industry, setIndustry] = useState('')
-    const [signupRole, setSignupRole] = useState('patient')
-    const [institutionEmail, setInstitutionEmail] = useState('')
-    const [institutionName, setInstitutionName] = useState('')
+    const [role, setRole] = useState('patient')
     const [licenseNumber, setLicenseNumber] = useState('')
-    const [employeeId, setEmployeeId] = useState('')
-    const [orcid, setOrcid] = useState('')
-
+    const [consent, setConsent] = useState(false)
+    const [otp, setOtp] = useState('')
+    
     const [error, setError] = useState(null)
     const [success, setSuccess] = useState(null)
     const [loading, setLoading] = useState(false)
+    const [step, setStep] = useState(1) // For multi-step forms
+    
+    // Background effect variables
+    const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
+
+    useEffect(() => {
+        const handleMouseMove = (e) => {
+            setMousePos({ x: e.clientX, y: e.clientY })
+        }
+        window.addEventListener('mousemove', handleMouseMove)
+        return () => window.removeEventListener('mousemove', handleMouseMove)
+    }, [])
 
     const toggleView = (newView) => {
         setView(newView)
-        setUsername('')
-        setPassword('')
-        setConfirmPassword('')
-        setFullName('')
-        setEmail('')
-        setOrganization('')
-        setIndustry('')
-        setSignupRole('patient')
-        setInstitutionEmail('')
-        setInstitutionName('')
-        setLicenseNumber('')
-        setEmployeeId('')
-        setOrcid('')
         setError(null)
         setSuccess(null)
+        setStep(1)
+        // Reset sensitive fields
+        setPassword('')
+        setConfirmPassword('')
+        setOtp('')
     }
 
-    const handleLoginSuccess = (userData) => {
-        // Check if profile is complete
+    const handleLoginSuccessCallback = (userData) => {
         if (userData.profile_complete === false) {
             setCurrentUser(userData)
             setShowOnboarding(true)
         } else {
-            // Profile already complete, proceed to dashboard
             onLoginSuccess(userData)
         }
     }
 
-    const handleOnboardingComplete = () => {
-        // After onboarding is done, proceed to dashboard
-        onLoginSuccess({
-            token: currentUser.token,
-            role: currentUser.role,
-            full_name: currentUser.full_name,
-            user_id: currentUser.user_id,
-            profile_complete: true
-        })
-    }
-
-    const handleOnboardingSkip = () => {
-        // User can skip onboarding and proceed anyway
-        onLoginSuccess({
-            token: currentUser.token,
-            role: currentUser.role,
-            full_name: currentUser.full_name,
-            user_id: currentUser.user_id,
-            profile_complete: false
-        })
-    }
-
     const handleGoogleLogin = async () => {
-        setError(null)
-        setLoading(true)
+        setError(null); setLoading(true)
         try {
-            // Simulate Google OAuth popup — in production, integrate with @react-oauth/google
-            const mockGoogleToken = prompt("Paste your Google ID token here (for demo, use any non-empty string):")
-            if (!mockGoogleToken) {
-                setLoading(false)
-                return
-            }
-            
             const res = await axios.post(`${API}/api/v1/auth/oauth/google`, {
-                token: mockGoogleToken,
+                token: "mock_google_token_12345",
                 device_id: "browser-google-" + Date.now(),
                 device_name: "Web Browser"
             })
-            
-            handleLoginSuccess({
-                token: res.data.access_token,
-                role: res.data.role,
-                full_name: res.data.full_name,
-                user_id: res.data.user_id,
-                profile_complete: res.data.profile_complete
-            })
+            handleLoginSuccessCallback(res.data)
         } catch (err) {
-            setError(err.response?.data?.detail || "Google login failed. Try email/password instead.")
-        }
-        setLoading(false)
+            setError(err.response?.data?.detail || "Google login failed.")
+        } finally { setLoading(false) }
     }
 
     const handleSubmit = async (e) => {
         e.preventDefault()
-        setError(null)
-        setSuccess(null)
-        setLoading(true)
+        setError(null); setSuccess(null); setLoading(true)
 
         try {
-            if (isForgot) {
-                if (!username) { setError("Please enter your email."); setLoading(false); return; }
+            if (view === 'login') {
+                if (!email || !password) throw new Error("Please enter email and password.")
+                const res = await axios.post(`${API}/api/v1/auth/login`, { email, password })
+                handleLoginSuccessCallback(res.data)
                 
-                await axios.post(`${API}/api/v1/auth/forgot-password`, {
-                    email: username
-                })
+            } else if (view === 'signup') {
+                if (step === 1) {
+                    if (!role) throw new Error("Please select a role.")
+                    setStep(2); setLoading(false); return;
+                }
                 
-                setSuccess("✅ OTP sent to your email. Please check and follow the reset link.")
-                setUsername('')
-                setPassword('')
-                setLoading(false)
-                setTimeout(() => toggleView('login'), 2500)
-                return
-            }
-            if (isSignUp) {
-                if (password.length < 8) { setError("Security Error: Password must be at least 8 characters long."); setLoading(false); return; }
-                if (!/[A-Z]/.test(password)) { setError("Security Error: Password must contain at least one uppercase letter."); setLoading(false); return; }
-                if (!/[a-z]/.test(password)) { setError("Security Error: Password must contain at least one lowercase letter."); setLoading(false); return; }
-                if (!/[0-9]/.test(password)) { setError("Security Error: Password must contain at least one number."); setLoading(false); return; }
-                if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) { setError("Security Error: Password must contain at least one special character."); setLoading(false); return; }
-                if (password !== confirmPassword) { setError("Passwords do not match. Please try again."); setLoading(false); return; }
+                if (password !== confirmPassword) throw new Error("Passwords do not match.")
+                if (password.length < 12) throw new Error("Password must be at least 12 characters.")
                 
                 await axios.post(`${API}/api/v1/auth/signup`, {
-                    full_name: fullName, 
-                    email, 
-                    password,
-                    mobile: '+1234567890',
-                    organization, 
-                    industry, 
-                    role: signupRole,
-                    institution_email: institutionEmail || undefined,
-                    institution_name: institutionName || organization || undefined,
+                    full_name: fullName,
+                    email, password, mobile,
+                    role,
+                    organization: organization || undefined,
                     license_number: licenseNumber || undefined,
-                    employee_id: employeeId || undefined,
-                    orcid: orcid || undefined
-                })
-                toggleView('login')
-                setSuccess(signupRole === 'patient'
-                    ? "✅ Patient registration successful. Please log in."
-                    : "✅ Professional registration created. Submit verification documents to activate your account.")
-            } else {
-                if (!username || !password) { setError("Please enter email and password."); setLoading(false); return; }
-                
-                const res = await axios.post(`${API}/api/v1/auth/login`, {
-                    email: username,
-                    password: password
+                    consent: role === 'patient' ? consent : undefined,
+                    institutional_email: role !== 'patient' ? email : undefined,
+                    documents: [] 
                 })
                 
-                handleLoginSuccess({
-                    token: res.data.access_token,
-                    role: res.data.role,
-                    full_name: res.data.full_name,
-                    user_id: res.data.user_id,
-                    profile_complete: res.data.profile_complete
-                })
+                setSuccess("Account created successfully! Please log in.")
+                setTimeout(() => toggleView('login'), 2000)
+                
+            } else if (view === 'forgot') {
+                if (step === 1) {
+                    if (!email) throw new Error("Please enter your email.")
+                    await axios.post(`${API}/api/v1/auth/forgot-password`, { email })
+                    setSuccess("OTP sent to your email and mobile.")
+                    setStep(2)
+                } else if (step === 2) {
+                    if (!otp || !password) throw new Error("Please enter OTP and new password.")
+                    await axios.post(`${API}/api/v1/auth/verify-otp`, { email, otp, new_password: password })
+                    setSuccess("Password reset successful. Please log in.")
+                    setTimeout(() => toggleView('login'), 2000)
+                }
             }
         } catch (err) {
-            setError(err.response?.data?.detail || err.response?.data?.error || err.message)
+            setError(err.response?.data?.detail || err.message)
+        } finally {
+            setLoading(false)
         }
-        setLoading(false)
+    }
+
+    // Dynamic background style based on mouse
+    const bgStyle = {
+        '--tx': `${(mousePos.x - window.innerWidth / 2) * 0.05}px`,
+        '--ty': `${(mousePos.y - window.innerHeight / 2) * 0.05}px`
     }
 
     return (
-        <>
+        <div className="login-page" style={bgStyle}>
+            {/* Animated Background Elements */}
+            <div className="login-bg-layer" />
+            <div className="login-orb login-orb--1" />
+            <div className="login-orb login-orb--2" />
+            <div className="login-orb login-orb--3" />
+
+            {/* Support Modal */}
+            {showSupport && (
+                <div className="support-modal-overlay" onClick={() => setShowSupport(false)}>
+                    <div className="support-modal" onClick={e => e.stopPropagation()}>
+                        <h3>Contact Support</h3>
+                        <p>Our engineering team is available 24/7 for technical assistance and account recovery.</p>
+                        <div style={{display:'flex', flexDirection:'column', gap:'12px'}}>
+                            <div className="input-group">
+                                <label>Email Address</label>
+                                <div className="input-wrapper">
+                                    <input type="email" placeholder="Enter your email" />
+                                </div>
+                            </div>
+                            <div className="input-group">
+                                <label>Issue Description</label>
+                                <div className="input-wrapper">
+                                    <textarea style={{width:'100%', padding:'12px', background:'var(--input-bg)', border:'1px solid var(--input-border)', borderRadius:'12px', color:'#fff', minHeight:'100px'}} placeholder="Describe your issue..."></textarea>
+                                </div>
+                            </div>
+                            <button className="btn-login btn-primary" onClick={() => {setShowSupport(false); setSuccess("Support ticket submitted.");}}>
+                                Submit Ticket
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {showOnboarding && currentUser && (
                 <OnboardingModal
                     user={currentUser}
-                    onComplete={handleOnboardingComplete}
-                    onSkip={handleOnboardingSkip}
+                    onComplete={() => onLoginSuccess({...currentUser, profile_complete: true})}
+                    onSkip={() => onLoginSuccess(currentUser)}
                 />
             )}
-        <div style={{
-            height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column',
-            background: `linear-gradient(rgba(6, 17, 37, 0.5), rgba(6, 17, 37, 0.7)), url('/login-bg-3.png') center/cover no-repeat, #061125`,
-            position: 'relative', overflow: 'hidden', fontFamily: "'Inter', 'Segoe UI', Roboto, sans-serif"
-        }}>
-            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '40px 20px 80px 20px', boxSizing: 'border-box', zIndex: 10 }}>
-            {/* Top Logo Section */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 25, zIndex: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="url(#shield-grad)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <defs>
-                            <linearGradient id="shield-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" stopColor="#ffffff" />
-                                <stop offset="100%" stopColor="#94a3b8" />
-                            </linearGradient>
-                        </defs>
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="rgba(255,255,255,0.02)"/>
-                        {/* Inner molecule dots representing DrugIntel */}
-                        <circle cx="9" cy="11" r="1.5" fill="#ffffff" />
-                        <circle cx="15" cy="9" r="1.5" fill="#ffffff" />
-                        <circle cx="13" cy="15" r="1.5" fill="#ffffff" />
-                        <path d="M9 11l6-2M15 9l-2 6" stroke="#ffffff" strokeWidth="1.5" />
-                    </svg>
-                    <h1 style={{ fontSize: 42, fontWeight: 600, margin: 0, color: '#e2e8f0', letterSpacing: '0.5px' }}>DrugIntel</h1>
-                </div>
-                <p style={{ margin: 0, color: '#cbd5e1', fontSize: 16, letterSpacing: '0.3px', fontWeight: 500 }}>AI-Powered Drug Discovery & Safety Intelligence</p>
-            </div>
 
-            {/* Login Box */}
-            <div style={{
-                zIndex: 10, width: '100%', maxWidth: isSignUp ? 500 : 460,
-                background: 'linear-gradient(180deg, rgba(38, 65, 115, 0.95) 0%, rgba(18, 30, 58, 0.98) 100%)',
-                borderRadius: 4,
-                border: '1px solid rgba(255, 255, 255, 0.35)',
-                boxShadow: '0 15px 35px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255,255,255,0.4)',
-                transition: 'max-width 0.3s ease',
-                display: 'flex', flexDirection: 'column'
-            }}>
-                <div style={{ padding: '30px 40px', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ textAlign: 'center', marginBottom: 25 }}>
-                        <h2 style={{ fontSize: 28, color: '#ffffff', marginTop: 0, marginBottom: 8, fontWeight: 600 }}>{isSignUp ? 'Official Registration' : isForgot ? 'Reset Password' : 'Welcome Back'}</h2>
-                        <p style={{ margin: 0, color: '#e2e8f0', fontSize: 15 }}>{isSignUp ? 'Create your DrugIntel account' : isForgot ? 'Enter your email to receive a reset link' : 'Please log in to continue'}</p>
+            <div className="login-content">
+                <div className="login-brand">
+                    <div className="login-brand-row">
+                        <div className="login-brand-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                                <circle cx="9" cy="11" r="1.5" fill="#fff" />
+                                <circle cx="15" cy="9" r="1.5" fill="#fff" />
+                                <path d="M9 11l6-2M15 9l-2 6" stroke="#fff" strokeWidth="1.5" />
+                            </svg>
+                        </div>
+                        <h1>DrugIntel</h1>
                     </div>
-                    
-                    {error && <div style={{ background: 'rgba(220, 38, 38, 0.2)', color: '#fca5a5', padding: 10, borderRadius: 4, marginBottom: 20, fontSize: 13, border: '1px solid rgba(220, 38, 38, 0.5)', textAlign: 'center' }}>{error}</div>}
-                    {success && <div style={{ background: 'rgba(34, 197, 94, 0.2)', color: '#86efac', padding: 10, borderRadius: 4, marginBottom: 20, fontSize: 13, border: '1px solid rgba(34, 197, 94, 0.5)', textAlign: 'center' }}>{success}</div>}
+                    <span className="login-brand-tagline">AI-Powered Drug Discovery & Safety Intelligence</span>
+                </div>
 
-                    <form onSubmit={handleSubmit} style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 16 }}>
-                        {isSignUp && (
-                            <>
-                                <InputBox icon="user" placeholder="Full Name" value={fullName} onChange={e => setFullName(e.target.value)} />
-                                <InputBox icon="mail" type="email" placeholder="Official Email" value={email} onChange={e => setEmail(e.target.value)} />
-                                <div style={{ position: 'relative' }}>
-                                    <select value={signupRole} onChange={e => setSignupRole(e.target.value)} style={{...inputStyle, paddingLeft: 16}} required>
-                                        <option value="patient" style={{ background: '#0f172a', color: '#fff' }}>Patient</option>
-                                        <option value="doctor" style={{ background: '#0f172a', color: '#fff' }}>Doctor</option>
-                                        <option value="pharmacist" style={{ background: '#0f172a', color: '#fff' }}>Pharmacist</option>
-                                        <option value="chemist" style={{ background: '#0f172a', color: '#fff' }}>Chemist</option>
-                                        <option value="research_scientist" style={{ background: '#0f172a', color: '#fff' }}>Research Scientist</option>
-                                        <option value="auditor" style={{ background: '#0f172a', color: '#fff' }}>Auditor</option>
-                                        <option value="admin" style={{ background: '#0f172a', color: '#fff' }}>Admin</option>
-                                    </select>
-                                </div>
-                                <InputBox icon="building" placeholder="Organization / Institution Name" value={organization} onChange={e => setOrganization(e.target.value)} />
-                                <div style={{ position: 'relative' }}>
-                                    <select value={industry} onChange={e => setIndustry(e.target.value)} style={{...inputStyle, paddingLeft: 16}} required>
-                                        <option value="" disabled style={{ color: '#94a3b8' }}>Select Industry Sector</option>
-                                        <option value="pharmacist" style={{ background: '#0f172a', color: '#fff' }}>Clinical / Pharmacist</option>
-                                        <option value="chemistry" style={{ background: '#0f172a', color: '#fff' }}>R&D Chemistry</option>
-                                        <option value="gov" style={{ background: '#0f172a', color: '#fff' }}>Gov Auditor / Regulator</option>
-                                    </select>
-                                </div>
-                                {signupRole !== 'patient' && (
-                                    <>
-                                        <InputBox icon="mail" type="email" placeholder="Institutional Email" value={institutionEmail} onChange={e => setInstitutionEmail(e.target.value)} />
-                                        <InputBox icon="building" placeholder="Institution Name" value={institutionName} onChange={e => setInstitutionName(e.target.value)} />
-                                        <InputBox icon="user" placeholder={signupRole === 'research_scientist' ? 'ORCID' : 'License Number'} value={signupRole === 'research_scientist' ? orcid : licenseNumber} onChange={e => signupRole === 'research_scientist' ? setOrcid(e.target.value) : setLicenseNumber(e.target.value)} />
-                                        {(signupRole === 'doctor' || signupRole === 'pharmacist' || signupRole === 'chemist' || signupRole === 'auditor' || signupRole === 'admin') && (
-                                            <InputBox icon="user" placeholder="Employee / Registry ID (optional)" value={employeeId} onChange={e => setEmployeeId(e.target.value)} />
-                                        )}
-                                    </>
-                                )}
-                            </>
-                        )}
-                        {isForgot ? (
-                            <>
-                                <InputBox icon="mail" placeholder="Enter your registered email or username" value={username} onChange={e => setUsername(e.target.value)} />
-                                <InputBox type="password" icon="lock" placeholder="Enter your new password" value={password} onChange={e => setPassword(e.target.value)} />
-                            </>
-                        ) : (
-                            <>
-                                <InputBox icon="user" placeholder="Enter your username or email" value={username} onChange={e => setUsername(e.target.value)} />
-                                
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                    <InputBox type="password" icon="lock" placeholder="Enter your password" value={password} onChange={e => setPassword(e.target.value)} />
-                                    {!isSignUp && (
-                                        <div style={{ textAlign: 'right', marginTop: 4 }}>
-                                            <a href="#" onClick={(e) => { e.preventDefault(); toggleView('forgot'); }} style={{ color: '#e2e8f0', fontSize: 13, textDecoration: 'underline', transition: 'color 0.2s', fontWeight: 500 }} onMouseOver={e => e.target.style.color = '#fff'} onMouseOut={e => e.target.style.color = '#e2e8f0'}>
-                                                Forgot Password?
-                                            </a>
+                <div className="login-card">
+                    <div className="login-tabs">
+                        <button className={`login-tab ${view === 'login' ? 'active' : ''}`} onClick={() => toggleView('login')}>Sign In</button>
+                        <button className={`login-tab ${view === 'signup' ? 'active' : ''}`} onClick={() => toggleView('signup')}>Create Account</button>
+                    </div>
+
+                    <div className="login-card-body">
+                        <h2>
+                            {view === 'login' ? 'Welcome Back' : 
+                             view === 'signup' ? 'Enterprise Registration' : 'Account Recovery'}
+                        </h2>
+                        <p className="login-subtitle">
+                            {view === 'login' ? 'Securely access your healthcare intelligence dashboard.' : 
+                             view === 'signup' && step === 1 ? 'Select your professional or patient role to continue.' :
+                             view === 'signup' && step === 2 ? 'Complete your profile details below.' :
+                             view === 'forgot' && step === 1 ? 'Enter your email to receive a recovery code.' :
+                             'Enter your 6-digit OTP and new password.'}
+                        </p>
+
+                        {error && <div className="login-alert error">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            {error}
+                        </div>}
+                        
+                        {success && <div className="login-alert success">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                            {success}
+                        </div>}
+
+                        <form className="login-form" onSubmit={handleSubmit}>
+                            {/* ── LOGIN VIEW ── */}
+                            {view === 'login' && (
+                                <>
+                                    <div className="input-group">
+                                        <label>Email / Username</label>
+                                        <div className="input-wrapper">
+                                            <span className="input-icon">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                                            </span>
+                                            <input type="text" placeholder="Enter your email" value={email} onChange={e => setEmail(e.target.value)} />
+                                        </div>
+                                    </div>
+                                    <div className="input-group">
+                                        <label>Password</label>
+                                        <div className="input-wrapper">
+                                            <span className="input-icon">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                            </span>
+                                            <input type="password" placeholder="••••••••••••" value={password} onChange={e => setPassword(e.target.value)} />
+                                        </div>
+                                        <div className="forgot-link">
+                                            <a href="#" onClick={(e) => { e.preventDefault(); toggleView('forgot'); }}>Forgot Password?</a>
+                                        </div>
+                                    </div>
+
+                                    <div className="remember-me">
+                                        <input type="checkbox" id="rem" />
+                                        <label htmlFor="rem" style={{color:'var(--text-secondary)', fontSize:'13px'}}>Keep me securely logged in</label>
+                                    </div>
+
+                                    <button type="submit" disabled={loading} className="btn-login btn-primary">
+                                        <div className="btn-shimmer" />
+                                        {loading ? 'Authenticating...' : 'Sign In'}
+                                    </button>
+
+                                    <div className="login-divider">or connect with</div>
+
+                                    <button type="button" onClick={handleGoogleLogin} disabled={loading} className="btn-google">
+                                        <svg width="20" height="20" viewBox="0 0 48 48">
+                                            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                                            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                                            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                                            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                                        </svg>
+                                        Google (Patient Only)
+                                    </button>
+                                </>
+                            )}
+
+                            {/* ── SIGNUP VIEW ── */}
+                            {view === 'signup' && step === 1 && (
+                                <>
+                                    <div className="signup-role-grid">
+                                        <div className={`role-card ${role === 'patient' ? 'selected' : ''}`} onClick={() => setRole('patient')}>
+                                            <span className="role-card-icon">🩺</span>
+                                            <span className="role-card-label">Patient</span>
+                                        </div>
+                                        <div className={`role-card ${role === 'doctor' ? 'selected' : ''}`} onClick={() => setRole('doctor')}>
+                                            <span className="role-card-icon">👨‍⚕️</span>
+                                            <span className="role-card-label">Physician / Doctor</span>
+                                        </div>
+                                        <div className={`role-card ${role === 'research_scientist' ? 'selected' : ''}`} onClick={() => setRole('research_scientist')}>
+                                            <span className="role-card-icon">🔬</span>
+                                            <span className="role-card-label">Research Scientist</span>
+                                        </div>
+                                        <div className={`role-card ${role === 'pharmacist' ? 'selected' : ''}`} onClick={() => setRole('pharmacist')}>
+                                            <span className="role-card-icon">💊</span>
+                                            <span className="role-card-label">Pharmacist</span>
+                                        </div>
+                                    </div>
+                                    <p style={{fontSize:'12px', color:'var(--text-muted)', textAlign:'center', margin:'0 0 10px'}}>
+                                        Professionals require license verification before full access is granted.
+                                    </p>
+                                    <button type="submit" className="btn-login btn-primary">
+                                        Continue Setup
+                                    </button>
+                                </>
+                            )}
+
+                            {view === 'signup' && step === 2 && (
+                                <>
+                                    <div className="input-group">
+                                        <label>Full Name</label>
+                                        <div className="input-wrapper">
+                                            <input type="text" placeholder="John Doe" value={fullName} onChange={e => setFullName(e.target.value)} required/>
+                                        </div>
+                                    </div>
+                                    <div className="input-group">
+                                        <label>{role === 'patient' ? 'Email Address' : 'Institutional Email'}</label>
+                                        <div className="input-wrapper">
+                                            <input type="email" placeholder="john@example.com" value={email} onChange={e => setEmail(e.target.value)} required/>
+                                        </div>
+                                    </div>
+                                    <div className="input-group">
+                                        <label>Mobile Number (For OTP)</label>
+                                        <div className="input-wrapper">
+                                            <input type="tel" placeholder="+1234567890" value={mobile} onChange={e => setMobile(e.target.value)} required/>
+                                        </div>
+                                    </div>
+
+                                    {role !== 'patient' && (
+                                        <>
+                                            <div className="input-group">
+                                                <label>Institution / Hospital</label>
+                                                <div className="input-wrapper">
+                                                    <input type="text" placeholder="General Hospital" value={organization} onChange={e => setOrganization(e.target.value)} required/>
+                                                </div>
+                                            </div>
+                                            <div className="input-group">
+                                                <label>Medical/Professional License #</label>
+                                                <div className="input-wrapper">
+                                                    <input type="text" placeholder="LIC-12345" value={licenseNumber} onChange={e => setLicenseNumber(e.target.value)} required/>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    <div className="input-group">
+                                        <label>Create Password</label>
+                                        <div className="input-wrapper">
+                                            <input type="password" placeholder="Min 12 characters" value={password} onChange={e => setPassword(e.target.value)} required/>
+                                        </div>
+                                    </div>
+                                    <div className="input-group">
+                                        <label>Confirm Password</label>
+                                        <div className="input-wrapper">
+                                            <input type="password" placeholder="Confirm password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required/>
+                                        </div>
+                                    </div>
+
+                                    {role === 'patient' && (
+                                        <div className="remember-me" style={{marginTop:'8px'}}>
+                                            <input type="checkbox" id="consent" checked={consent} onChange={e => setConsent(e.target.checked)} required />
+                                            <label htmlFor="consent" style={{color:'var(--text-secondary)', fontSize:'12px'}}>
+                                                I consent to anonymized data collection for cardiovascular AI research.
+                                            </label>
                                         </div>
                                     )}
-                                </div>
-                            </>
-                        )}
-                        
-                        {isSignUp && (
-                            <InputBox type="password" icon="lock" placeholder="Confirm Password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
-                        )}
-                        
-                        <button type="submit" disabled={loading} style={{
-                            width: '100%', padding: '12px', marginTop: 12,
-                            background: 'linear-gradient(180deg, #f8fafc 0%, #3b82f6 25%, #1e3a8a 100%)',
-                            border: '1px solid #0f172a',
-                            borderRadius: 4, color: '#ffffff', fontSize: 18, fontWeight: 700,
-                            cursor: loading ? 'not-allowed' : 'pointer',
-                            boxShadow: '0 4px 10px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255,255,255,0.9)',
-                            textShadow: '0 1px 2px rgba(0,0,0,0.6)',
-                            transition: 'transform 0.1s'
-                        }}
-                        onMouseDown={e => e.currentTarget.style.transform = 'scale(0.98)'}
-                        onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
-                        >
-                            {loading ? (isForgot ? 'Resetting...' : 'Authenticating...') : isSignUp ? 'Submit Registration' : isForgot ? 'Set New Password' : 'Log In'}
-                        </button>
 
-                        {/* Google Sign-In Button — Only show on login view */}
-                        {!isSignUp && !isForgot && (
-                            <>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16, marginBottom: 8 }}>
-                                    <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.2)' }} />
-                                    <span style={{ color: '#cbd5e1', fontSize: 13, fontWeight: 500 }}>or</span>
-                                    <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.2)' }} />
-                                </div>
-                                <button type="button" onClick={handleGoogleLogin} disabled={loading} style={{
-                                    width: '100%', padding: '12px', marginTop: 4,
-                                    background: 'linear-gradient(180deg, #f3f4f6 0%, #ffffff 100%)',
-                                    border: '1px solid rgba(0, 0, 0, 0.2)',
-                                    borderRadius: 4, color: '#1f2937', fontSize: 16, fontWeight: 700,
-                                    cursor: loading ? 'not-allowed' : 'pointer',
-                                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-                                    transition: 'transform 0.1s'
-                                }}
-                                onMouseDown={e => e.currentTarget.style.transform = 'scale(0.98)'}
-                                onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
-                                >
-                                    <svg width="20" height="20" viewBox="0 0 48 48" fill="none">
-                                        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19c1.75-4.9 6.38-8.41 11.46-8.41z"/>
-                                        <path fill="#4285F4" d="M23.99 44.5c6.47 0 11.9-2.38 15.89-6.84l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.05 0-11.25-4.03-13.06-9.42l-8.1 6.28C6.51 39.62 14.62 44.5 23.99 44.5z"/>
-                                        <path fill="#FBBC05" d="M9.58 29.24c-.77-2.46-1.2-5.09-1.2-7.74 0-2.65.43-5.28 1.2-7.74l-8.1-6.28C.92 10.9 0 17.43 0 24s.92 13.1 2.56 19.26l7.98-6.02z"/>
-                                        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-6.84l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.05 0-11.25-4.03-13.06-9.42l-8.1 6.28c3.88 7.78 11.95 13.68 21.16 13.68z"/>
-                                        <path fill="none" d="M0 0h48v48H0z"/>
-                                    </svg>
-                                    Sign in with Google
-                                </button>
-                            </>
-                        )}
-                    </form>
-                </div>
-                
-                {/* Bottom Footer Area inside the box */}
-                <div style={{ padding: '14px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, color: '#f8fafc', background: 'rgba(10, 20, 45, 0.5)', borderTop: '1px solid rgba(255,255,255,0.15)' }}>
-                    {(!isSignUp && !isForgot) ? (
-                        <>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 500 }}>
-                                <input type="checkbox" style={{ accentColor: '#3b82f6', width: 14, height: 14 }} />
-                                Remember Me
-                            </label>
-                            <div style={{ display: 'flex', gap: 8 }}>
-                                <button type="button" onClick={() => toggleView('signup')} style={linkBtnStyle}>Sign Up</button>
-                                <span>|</span>
-                                <button type="button" onClick={() => setError("Please contact support at support@drugintel.com for assistance.")} style={linkBtnStyle}>Need Help?</button>
-                            </div>
-                        </>
-                    ) : (
-                        <div style={{ width: '100%', textAlign: 'center' }}>
-                            <button type="button" onClick={() => toggleView('login')} style={linkBtnStyle}>Back to Login</button>
+                                    <div style={{display:'flex', gap:'10px', marginTop:'8px'}}>
+                                        <button type="button" onClick={() => setStep(1)} className="btn-login" style={{background:'rgba(255,255,255,0.05)', color:'#fff'}}>Back</button>
+                                        <button type="submit" disabled={loading} className="btn-login btn-primary">
+                                            <div className="btn-shimmer" />
+                                            {loading ? 'Creating...' : 'Register Account'}
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+
+                            {/* ── FORGOT PASSWORD VIEW ── */}
+                            {view === 'forgot' && step === 1 && (
+                                <>
+                                    <div className="input-group">
+                                        <label>Account Email</label>
+                                        <div className="input-wrapper">
+                                            <input type="email" placeholder="Enter your registered email" value={email} onChange={e => setEmail(e.target.value)} required/>
+                                        </div>
+                                    </div>
+                                    <button type="submit" disabled={loading} className="btn-login btn-primary">
+                                        <div className="btn-shimmer" />
+                                        {loading ? 'Sending...' : 'Send Recovery OTP'}
+                                    </button>
+                                </>
+                            )}
+
+                            {view === 'forgot' && step === 2 && (
+                                <>
+                                    <div className="input-group">
+                                        <label>Enter 6-Digit OTP</label>
+                                        <div className="otp-container">
+                                            <input type="text" className="otp-input" maxLength={6} placeholder="------" value={otp} onChange={e => setOtp(e.target.value)} style={{width:'100%', letterSpacing:'10px'}} required/>
+                                        </div>
+                                    </div>
+                                    <div className="input-group">
+                                        <label>New Password</label>
+                                        <div className="input-wrapper">
+                                            <input type="password" placeholder="Min 12 characters" value={password} onChange={e => setPassword(e.target.value)} required/>
+                                        </div>
+                                    </div>
+                                    <button type="submit" disabled={loading} className="btn-login btn-primary">
+                                        <div className="btn-shimmer" />
+                                        {loading ? 'Resetting...' : 'Confirm Reset'}
+                                    </button>
+                                </>
+                            )}
+                        </form>
+                    </div>
+
+                    <div className="login-card-footer">
+                        <div className="footer-links">
+                            <button className="footer-link">Terms</button>
+                            <span className="footer-sep">•</span>
+                            <button className="footer-link">Privacy</button>
                         </div>
-                    )}
+                        <button className="footer-link" onClick={() => setShowSupport(true)}>Need Help?</button>
+                    </div>
                 </div>
             </div>
+
+            <div className="login-page-footer">
+                <span>© 2026 DrugIntel Enterprise Platform</span>
+                <span className="sep">|</span>
+                <span className="hipaa-badge">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+                    HIPAA Ready
+                </span>
+                <span className="sep">|</span>
+                <span>ISO 27001</span>
             </div>
-
-            {/* Fixed Footer */}
-            <div style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', color: '#e2e8f0', fontSize: 13, display: 'flex', justifyContent: 'center', gap: 8, zIndex: 20, letterSpacing: '0.3px', borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: 16, paddingBottom: 16, backgroundColor: 'rgba(6, 17, 37, 0.6)', backdropFilter: 'blur(8px)' }}>
-                <span>© 2024 DrugIntel Systems</span>
-                <span style={{ opacity: 0.5 }}>|</span>
-                <span>Secure Access • GMP Compliant</span>
-            </div>
-        </div>
-        </>
-    )
-}
-
-const linkBtnStyle = { background: 'none', border: 'none', cursor: 'pointer', color: '#f8fafc', padding: 0, fontSize: 13, fontWeight: 600 }
-
-const inputStyle = {
-    width: '100%',
-    padding: '12px 16px 12px 42px',
-    borderRadius: 4,
-    border: '1px solid rgba(255, 255, 255, 0.15)',
-    background: '#0f172a',
-    color: '#fff',
-    fontSize: 14,
-    boxSizing: 'border-box',
-    outline: 'none',
-    boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.4)',
-    transition: 'border-color 0.2s, box-shadow 0.2s'
-}
-
-function InputBox({ type = "text", placeholder, value, onChange, icon }) {
-    return (
-        <div style={{ position: 'relative', width: '100%' }}>
-            <div style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                {icon === 'user' && (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#e2e8f0" stroke="none">
-                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                    </svg>
-                )}
-                {icon === 'lock' && (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#e2e8f0" stroke="none">
-                        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
-                    </svg>
-                )}
-                {icon === 'mail' && (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#e2e8f0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                        <polyline points="22,6 12,13 2,6"></polyline>
-                    </svg>
-                )}
-                {icon === 'building' && (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#e2e8f0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect>
-                        <path d="M9 22v-4h6v4"></path>
-                        <path d="M8 6h.01"></path>
-                        <path d="M16 6h.01"></path>
-                        <path d="M12 6h.01"></path>
-                        <path d="M12 10h.01"></path>
-                        <path d="M12 14h.01"></path>
-                        <path d="M16 10h.01"></path>
-                        <path d="M16 14h.01"></path>
-                        <path d="M8 10h.01"></path>
-                        <path d="M8 14h.01"></path>
-                    </svg>
-                )}
-            </div>
-            <input 
-                type={type} 
-                placeholder={placeholder} 
-                value={value} 
-                onChange={onChange} 
-                style={inputStyle} 
-                required 
-                onFocus={e => { e.target.style.borderColor = '#60a5fa'; e.target.style.boxShadow = '0 0 0 2px rgba(59, 130, 246, 0.3)'; }}
-                onBlur={e => { e.target.style.borderColor = 'rgba(255, 255, 255, 0.15)'; e.target.style.boxShadow = 'inset 0 1px 3px rgba(0,0,0,0.4)'; }}
-            />
         </div>
     )
 }

@@ -12,7 +12,7 @@ import jwt
 import bcrypt
 import secrets
 import string
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, EmailStr, validator, root_validator, Field
 import os
 import hashlib
 from functools import lru_cache
@@ -24,7 +24,7 @@ from database.db import get_db
 SECRET_KEY = os.getenv("JWT_SECRET", "super_secret_enterprise_key_2026_drugintel")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
-REFRESH_TOKEN_EXPIRE_DAYS = 7
+REFRESH_TOKEN_EXPIRE_DAYS = 30
 OTP_EXPIRE_MINUTES = 10
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login", auto_error=False)
@@ -38,7 +38,7 @@ class TokenResponse(BaseModel):
     token_type: str
     role: str
     user_id: int
-    full_name: str
+    full_name: Optional[str] = ""
     profile_complete: bool
     mfa_required: bool = False
 
@@ -49,19 +49,39 @@ class UserLoginRequest(BaseModel):
     device_name: Optional[str] = None
     remember_me: bool = False
 
+class DocumentItem(BaseModel):
+    type: str
+    file_id: str
+    notes: Optional[str] = None
+
 class UserSignupRequest(BaseModel):
-    full_name: str
+    full_name: str = Field(..., min_length=2, max_length=200)
     email: EmailStr
-    password: str
-    mobile: Optional[str]
-    role: models.UserRole = models.UserRole.PATIENT
-    organization: Optional[str]
-    industry: Optional[str]
-    institution_email: Optional[EmailStr] = None
-    institution_name: Optional[str] = None
+    mobile: str = Field(..., pattern=r"^\+?[1-9]\d{7,14}$")
+    username: Optional[str] = Field(None, min_length=3, max_length=50)
+    password: str = Field(..., min_length=12)
+    role: models.UserRole
+    organization: Optional[str] = Field(None, max_length=200)
+    country: Optional[str] = Field(None, max_length=100)
+    documents: List[DocumentItem] = []
     license_number: Optional[str] = None
-    employee_id: Optional[str] = None
-    orcid: Optional[str] = None
+    institutional_email: Optional[EmailStr] = None
+    consent: Optional[bool] = None
+
+    @root_validator(pre=True)
+    def validate_roles(cls, values):
+        role = values.get('role')
+        if role == 'patient':
+            if not values.get('consent'):
+                raise ValueError('Consent is required for patients')
+        elif role in ['doctor', 'pharmacist', 'chemist', 'research_scientist']:
+            if not values.get('institutional_email'):
+                raise ValueError('Institutional email is required for professionals')
+            if not values.get('documents'):
+                raise ValueError('Documents are required for professionals')
+            if not values.get('license_number') and role in ['doctor', 'pharmacist']:
+                raise ValueError('License number is required for this role')
+        return values
 
 class GoogleOAuthRequest(BaseModel):
     token: str  # Google ID token
@@ -228,26 +248,16 @@ async def login(
     if not user or not user.password_hash or not verify_password(credentials.password, user.password_hash):
         await log_audit(db, None, "LOGIN_FAILED", "auth", None, "failure", 
                        {"reason": "invalid_credentials"}, request)
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        raise HTTPException(status_code=401, detail="Email or password incorrect. If you forgot your password, reset it.")
     
     if not user.is_active:
         await log_audit(db, user.id, "LOGIN_FAILED", "auth", None, "failure",
                        {"reason": "account_inactive"}, request)
-        raise HTTPException(status_code=403, detail="Account is inactive")
+        raise HTTPException(status_code=403, detail="Account pending verification. Check your email for next steps.")
     
     # Check if MFA is required
     if user.mfa_enabled and user.role != models.UserRole.PATIENT:
-        # TODO: Implement MFA challenge
-        return TokenResponse(
-            access_token="",
-            refresh_token=None,
-            token_type="bearer",
-            role=user.role,
-            user_id=user.id,
-            full_name=user.full_name,
-            profile_complete=user.profile_complete,
-            mfa_required=True
-        )
+        raise HTTPException(status_code=401, detail="Multi‑factor authentication required. Enter code from your authenticator app.")
     
     # Create tokens
     access_token = create_token({"sub": user.id, "email": user.email}, token_type="access")
@@ -266,7 +276,7 @@ async def login(
             ip_address=context["ip_address"],
             access_token_hash=hash_token(access_token),
             refresh_token_hash=hash_token(refresh_token),
-            expires_at=datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+            expires_at=datetime.utcnow() + timedelta(days=90)
         )
         db.add(session)
     
@@ -345,14 +355,14 @@ async def google_oauth_login(
         )
         db.add(oauth_id)
     
-    if not user.is_active:
+    if user.is_active is False:
         await log_audit(db, user.id, "GOOGLE_LOGIN_FAILED", "auth", None, "failure",
                        {"reason": "account_inactive"}, request)
         raise HTTPException(status_code=403, detail="Account is inactive")
     
-    # Create tokens
-    access_token = create_token({"sub": user.id, "email": user.email}, token_type="access")
-    refresh_token = create_token({"sub": user.id, "email": user.email}, token_type="refresh")
+    # Create tokens (ensure user.id is string for JWT standard)
+    access_token = create_token({"sub": str(user.id), "email": user.email}, token_type="access")
+    refresh_token = create_token({"sub": str(user.id), "email": user.email}, token_type="refresh")
     
     # Update last login
     user.last_login = datetime.utcnow()
@@ -360,18 +370,17 @@ async def google_oauth_login(
     
     # Audit log
     await log_audit(db, user.id, "GOOGLE_LOGIN", "auth", str(user.id), "success", None, request)
-    
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
         token_type="bearer",
-        role=user.role,
+        role=user.role.value if hasattr(user.role, 'value') else (user.role or "patient"),
         user_id=user.id,
-        full_name=user.full_name,
-        profile_complete=user.profile_complete
+        full_name=user.full_name or "",
+        profile_complete=bool(user.profile_complete)
     )
 
-@router.post("/signup")
+@router.post("/signup", status_code=status.HTTP_201_CREATED)
 async def signup(
     signup_data: UserSignupRequest,
     request: Request,
@@ -387,17 +396,22 @@ async def signup(
     # Check if email exists
     existing_user = db.query(models.User).filter(models.User.email == signup_data.email).first()
     if existing_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=409, detail="Email already registered")
+        
+    if signup_data.username:
+        existing_username = db.query(models.User).filter(models.User.username == signup_data.username).first()
+        if existing_username:
+            raise HTTPException(status_code=409, detail="Username already registered")
     
     # Create user account
     user = models.User(
         email=signup_data.email,
+        username=signup_data.username,
         full_name=signup_data.full_name,
         mobile=signup_data.mobile,
         password_hash=get_password_hash(signup_data.password),
         role=signup_data.role,
         organization=signup_data.organization,
-        industry=signup_data.industry,
         is_verified=signup_data.role == models.UserRole.PATIENT
     )
     
@@ -411,30 +425,33 @@ async def signup(
             email=signup_data.email,
             role=signup_data.role,
             license_number=signup_data.license_number,
-            institution_email=signup_data.institution_email,
-            institution_name=signup_data.institution_name or signup_data.organization,
-            employee_id=signup_data.employee_id,
-            orcid=signup_data.orcid,
+            institution_email=signup_data.institutional_email,
+            institution_name=signup_data.organization,
+            documents=[doc.dict() for doc in signup_data.documents],
             status=models.VerificationStatus.PENDING
         )
         db.add(verification)
+        db.flush()
         response = {
-            "message": "Account created. Please submit verification documents.",
-            "user_id": user.id,
-            "verification_required": True
+            "message": "Account created. Professional verification pending admin review.",
+            "user_id": f"user_{user.id}",
+            "verification_required": True,
+            "verification_id": f"verif_{verification.id}",
+            "verification_state": "pending"
         }
     else:
         response = {
-            "message": "Patient account created successfully",
-            "user_id": user.id,
-            "verification_required": False
+            "message": "Patient account created. Complete profile for personalized checks.",
+            "user_id": f"user_{user.id}",
+            "verification_required": False,
+            "profile_complete": False
         }
     
     db.commit()
     
     # Audit log
     await log_audit(db, user.id, "SIGNUP", "auth", str(user.id), "success",
-                   {"role": signup_data.role}, request)
+                   {"role": signup_data.role.value}, request)
     
     return response
 
@@ -580,6 +597,40 @@ async def logout(
     
     return {"message": "Logged out successfully"}
 
+@router.post("/force_logout")
+async def force_logout(
+    user_id: int,
+    request: Request,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Admin triggered forced logout for a user
+    Revokes all sessions and forces password reset
+    """
+    if current_user.role != models.UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Forbidden")
+        
+    target_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Revoke all sessions
+    sessions = db.query(models.Session).filter(
+        models.Session.user_id == target_user.id
+    ).all()
+    for session in sessions:
+        session.is_active = False
+
+    target_user.must_reset_password = True
+    db.commit()
+
+    # Audit log
+    await log_audit(db, current_user.id, "FORCE_LOGOUT", "auth", str(target_user.id), "success",
+                   None, request)
+
+    return {"message": "User forcibly logged out"}
+
 # ==================== Session Management ====================
 
 @router.get("/sessions", response_model=List[SessionResponse])
@@ -691,49 +742,91 @@ async def list_verification_queue(
         for item in queue
     ]
 
-@router.patch("/verification/queue/{verification_id}")
-async def review_verification_request(
+@router.post("/verification/{verification_id}/approve")
+async def approve_verification(
     verification_id: int,
-    payload: Dict,
-    current_user: models.User = Depends(require_role(models.UserRole.ADMIN)),
     request: Request = None,
+    current_user: models.User = Depends(require_role(models.UserRole.ADMIN)),
     db: Session = Depends(get_db)
 ):
-    """Approve, reject, or mark verification requests as needing info"""
     verification = db.query(models.Verification).filter(models.Verification.id == verification_id).first()
     if not verification:
         raise HTTPException(status_code=404, detail="Verification request not found")
 
-    status_value = (payload.get("status") or "").lower()
-    notes = payload.get("reviewer_notes")
-
-    if status_value not in {"approved", "rejected", "needs_info"}:
-        raise HTTPException(status_code=400, detail="Invalid verification status")
-
-    verification.status = models.VerificationStatus(status_value)
-    verification.reviewer_notes = notes
+    verification.status = models.VerificationStatus.APPROVED
     verification.reviewer_id = current_user.id
-    verification.completed_at = datetime.utcnow() if status_value == "approved" else None
+    verification.completed_at = datetime.utcnow()
 
     user = db.query(models.User).filter(models.User.id == verification.user_id).first()
     if user:
-        user.is_verified = status_value == "approved"
+        user.is_verified = True
 
     db.commit()
 
     if request:
-        await log_audit(
-            db,
-            current_user.id,
-            "VERIFICATION_REVIEWED",
-            "verification",
-            str(verification.id),
-            "success",
-            {"status": status_value, "notes": notes},
-            request,
-        )
+        await log_audit(db, current_user.id, "VERIFICATION_REVIEWED", "verification", str(verification.id), "success", {"status": "approved"}, request)
 
-    return {"message": "Verification updated", "verification_id": verification.id, "status": verification.status}
+    return {
+        "verification_id": f"verif_{verification.id}",
+        "user_id": f"user_{user.id}" if user else None,
+        "role": verification.role,
+        "state": "approved",
+        "approved_by": f"admin_{current_user.id}",
+        "approved_at": verification.completed_at.isoformat() + "Z"
+    }
+
+@router.post("/verification/{verification_id}/reject")
+async def reject_verification(
+    verification_id: int,
+    payload: Dict,
+    request: Request = None,
+    current_user: models.User = Depends(require_role(models.UserRole.ADMIN)),
+    db: Session = Depends(get_db)
+):
+    verification = db.query(models.Verification).filter(models.Verification.id == verification_id).first()
+    if not verification:
+        raise HTTPException(status_code=404, detail="Verification request not found")
+
+    verification.status = models.VerificationStatus.REJECTED
+    verification.reviewer_notes = payload.get("reason", "")
+    verification.reviewer_id = current_user.id
+    verification.completed_at = datetime.utcnow()
+
+    db.commit()
+
+    if request:
+        await log_audit(db, current_user.id, "VERIFICATION_REVIEWED", "verification", str(verification.id), "success", {"status": "rejected", "reason": payload.get("reason")}, request)
+
+    return {
+        "verification_id": f"verif_{verification.id}",
+        "state": "rejected"
+    }
+
+@router.post("/verification/{verification_id}/request_more_info")
+async def request_more_info_verification(
+    verification_id: int,
+    payload: Dict,
+    request: Request = None,
+    current_user: models.User = Depends(require_role(models.UserRole.ADMIN)),
+    db: Session = Depends(get_db)
+):
+    verification = db.query(models.Verification).filter(models.Verification.id == verification_id).first()
+    if not verification:
+        raise HTTPException(status_code=404, detail="Verification request not found")
+
+    verification.status = models.VerificationStatus.NEEDS_INFO
+    verification.reviewer_notes = payload.get("reason", "")
+    verification.reviewer_id = current_user.id
+
+    db.commit()
+
+    if request:
+        await log_audit(db, current_user.id, "VERIFICATION_REVIEWED", "verification", str(verification.id), "success", {"status": "needs_more_info"}, request)
+
+    return {
+        "verification_id": f"verif_{verification.id}",
+        "state": "needs_more_info"
+    }
 
 @router.get("/me")
 async def get_current_user_profile(

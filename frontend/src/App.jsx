@@ -4,6 +4,7 @@ import Login from './pages/Login'
 import MainWorkspace from './pages/MainWorkspace'
 import LoadingAssembly from './components/LoadingAssembly'
 import './index.css'
+import PatientDashboard from './pages/PatientDashboard'
 
 export default function App() {
     const [userProfile, setUserProfile] = useState(null)
@@ -45,7 +46,11 @@ export default function App() {
                         userProfile ? <Navigate to="/workspace" /> : <Login onLoginSuccess={handleLoginSuccess} />
                     } />
                     <Route path="/workspace" element={
-                        userProfile ? <MainWorkspace userProfile={userProfile} onLogout={handleLogout} /> : <Navigate to="/" />
+                        userProfile ? (
+                            userProfile.role === 'patient' 
+                                ? <PatientDashboard userProfile={userProfile} onLogout={handleLogout} /> 
+                                : <MainWorkspace userProfile={userProfile} onLogout={handleLogout} />
+                        ) : <Navigate to="/" />
                     } />
                     <Route path="*" element={<Navigate to="/" />} />
                 </Routes>

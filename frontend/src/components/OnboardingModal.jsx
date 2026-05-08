@@ -7,6 +7,7 @@ export default function OnboardingModal({ user, onComplete, onSkip }) {
     const [step, setStep] = useState(1)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState(null)
+    const [successMsg, setSuccessMsg] = useState(null)
     
     // Step 1: Identity
     const [fullName, setFullName] = useState(user?.full_name || '')
@@ -70,6 +71,15 @@ export default function OnboardingModal({ user, onComplete, onSkip }) {
     }
 
     const handleSubmit = async () => {
+        setError(null)
+        if (step === 1) {
+            if (!fullName || !mobile) { setError('Full name and mobile are required.'); return; }
+        } else if (step === 2) {
+            if (!dob || !sex || !weight) { setError('Date of birth, sex/gender, and weight are required.'); return; }
+            if (parseFloat(weight) < 20 || parseFloat(weight) > 300) { setError('Weight must be between 20 and 300 kg.'); return; }
+            if (new Date(dob) >= new Date()) { setError('Date of birth must be in the past.'); return; }
+        }
+
         if (step < 4) {
             setStep(step + 1)
             return
@@ -85,30 +95,32 @@ export default function OnboardingModal({ user, onComplete, onSkip }) {
 
         try {
             await axios.post(`${API}/api/v1/patients/profile`, {
-                user_id: user.user_id,
                 full_name: fullName,
                 email: email,
                 mobile: mobile,
                 date_of_birth: dob,
-                sex_gender: sex,
-                weight_kg: parseFloat(weight) || null,
-                height_cm: parseFloat(height) || null,
-                allergies: allergies.join('; '),
-                current_medications: medications,
+                sex: sex,
+                weight_kg: parseFloat(weight),
+                height_cm: parseFloat(height) || undefined,
+                allergies: allergies.length > 0 ? allergies : [],
+                current_medications: medications.length > 0 ? medications.map(m => ({
+                    name: m.name || "Unknown", 
+                    dose_mg: parseFloat(m.dose) || 1.0, 
+                    frequency: m.frequency || "once_daily"
+                })) : [],
                 chronic_conditions: chronicConditions,
-                lifestyle: {
-                    alcohol: 'not_specified',
-                    smoking: 'not_specified'
-                },
-                consent_data: consentData,
+                alcohol_use: "none",
+                smoking_status: "never",
+                consent: consentData,
                 share_with_clinician: shareWithClinician
             })
 
-            onComplete()
+            setSuccessMsg('Profile saved — we used this data to update your DDI and dosing results.')
+            setTimeout(() => onComplete(), 3000)
         } catch (err) {
             setError(err.response?.data?.detail || err.message)
+            setLoading(false)
         }
-        setLoading(false)
     }
 
     const handleBack = () => {
@@ -134,10 +146,10 @@ export default function OnboardingModal({ user, onComplete, onSkip }) {
                 {/* Header */}
                 <div style={{ marginBottom: 30 }}>
                     <h2 style={{ margin: '0 0 8px 0', fontSize: 28, fontWeight: 700, color: '#fff' }}>
-                        Complete Your Profile
+                        Complete your Patient Profile (1 minute)
                     </h2>
                     <p style={{ margin: 0, fontSize: 14, color: '#cbd5e1' }}>
-                        Help us provide better safety insights • {stepTitles[step - 1]}
+                        {stepTitles[step - 1]} • Complete your profile later to enable personalized dosing and history‑aware checks.
                     </p>
                 </div>
 
@@ -150,13 +162,21 @@ export default function OnboardingModal({ user, onComplete, onSkip }) {
                     }} />
                 </div>
 
-                {/* Error */}
+                {/* Error and Success */}
                 {error && (
                     <div style={{
                         background: 'rgba(220, 38, 38, 0.2)', color: '#fca5a5', padding: 12,
                         borderRadius: 4, marginBottom: 20, fontSize: 13, border: '1px solid rgba(220,38,38,0.5)'
                     }}>
                         {error}
+                    </div>
+                )}
+                {successMsg && (
+                    <div style={{
+                        background: 'rgba(34, 197, 94, 0.2)', color: '#86efac', padding: 12,
+                        borderRadius: 4, marginBottom: 20, fontSize: 13, border: '1px solid rgba(34,197,94,0.5)'
+                    }}>
+                        {successMsg}
                     </div>
                 )}
 
@@ -307,7 +327,7 @@ export default function OnboardingModal({ user, onComplete, onSkip }) {
                             ...buttonStyle, flex: 0.3, background: 'rgba(255,255,255,0.1)',
                             border: '1px solid rgba(255,255,255,0.2)', color: '#e2e8f0'
                         }}>
-                            Skip
+                            Skip — limited access
                         </button>
                     )}
                     <button onClick={handleSubmit} disabled={loading} style={{
@@ -315,7 +335,7 @@ export default function OnboardingModal({ user, onComplete, onSkip }) {
                         background: step === 4 ? 'linear-gradient(180deg, #4ade80 0%, #22c55e 100%)' : 'linear-gradient(180deg, #3b82f6 0%, #1e40af 100%)',
                         color: '#fff'
                     }}>
-                        {loading ? 'Saving...' : step === 4 ? 'Complete Onboarding' : 'Next'}
+                        {loading ? 'Saving...' : step === 4 ? 'Complete now' : 'Next'}
                     </button>
                 </div>
             </div>

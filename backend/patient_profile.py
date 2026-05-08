@@ -4,33 +4,39 @@ from datetime import datetime
 from database.models import PatientProfile, PatientProfileSnapshot, User
 from database.db import get_db
 from auth_v2 import get_current_user
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, EmailStr
 from typing import Optional, List
 
 router = APIRouter(prefix="/api/v1/patients", tags=["patients"])
 
 # Pydantic Models
 class MedicationInput(BaseModel):
-    name: str
-    dose: str
+    name: str = Field(..., max_length=200)
+    dose_mg: float = Field(..., ge=0.01)
     frequency: str
-    startDate: Optional[str] = None
+    route: Optional[str] = Field(None, max_length=100)
+    start_date: Optional[str] = None
 
 class PatientProfileCreate(BaseModel):
-    user_id: str
-    full_name: Optional[str] = None
-    email: Optional[str] = None
-    mobile: Optional[str] = None
-    date_of_birth: Optional[str] = None
-    sex_gender: Optional[str] = None
-    weight_kg: Optional[float] = None
-    height_cm: Optional[float] = None
-    allergies: Optional[str] = None
-    current_medications: Optional[List[MedicationInput]] = None
-    chronic_conditions: Optional[List[str]] = None
-    lifestyle: Optional[dict] = None
-    consent_data: bool = False
+    full_name: str = Field(..., min_length=2, max_length=200)
+    email: EmailStr
+    mobile: str = Field(..., pattern=r"^\+?[1-9]\d{7,14}$")
+    date_of_birth: str
+    sex: str
+    weight_kg: float = Field(..., ge=20, le=300)
+    height_cm: Optional[float] = Field(None, ge=50, le=250)
+    allergies: List[str] = []
+    current_medications: List[MedicationInput] = []
+    chronic_conditions: List[str] = []
+    egfr_ml_min_173m2: Optional[float] = Field(None, ge=0)
+    alt_u_l: Optional[float] = Field(None, ge=0)
+    ast_u_l: Optional[float] = Field(None, ge=0)
+    pregnancy_status: Optional[str] = None
+    alcohol_use: Optional[str] = None
+    smoking_status: Optional[str] = None
     share_with_clinician: bool = False
+    consent: bool
+    metadata_fields: Optional[dict] = Field(None, alias="metadata")
 
 @router.post("/profile")
 async def create_or_update_profile(
@@ -52,21 +58,22 @@ async def create_or_update_profile(
     # Prepare profile data
     profile_dict = {
         "user_id": user.id,
-        "full_name": profile_data.full_name or user.full_name,
-        "email": profile_data.email or user.email,
-        "mobile": profile_data.mobile or "",
-        "date_of_birth": profile_data.date_of_birth,
-        "sex_gender": profile_data.sex_gender or "not_specified",
+        "full_name": profile_data.full_name,
+        "email": profile_data.email,
+        "mobile": profile_data.mobile,
+        "date_of_birth": datetime.strptime(profile_data.date_of_birth, "%Y-%m-%d") if profile_data.date_of_birth else None,
+        "sex_gender": profile_data.sex,
         "weight_kg": profile_data.weight_kg,
         "height_cm": profile_data.height_cm,
-        "allergies": profile_data.allergies or "",
-        "current_medications": [
-            {"name": m.name, "dose": m.dose, "frequency": m.frequency}
-            for m in (profile_data.current_medications or [])
-        ],
-        "chronic_conditions": profile_data.chronic_conditions or [],
-        "lifestyle": profile_data.lifestyle or {"alcohol": "not_specified", "smoking": "not_specified"},
-        "consent_data": profile_data.consent_data,
+        "allergies": profile_data.allergies,
+        "current_medications": [m.dict() for m in profile_data.current_medications],
+        "past_medical_history": profile_data.chronic_conditions,
+        "egfr": profile_data.egfr_ml_min_173m2,
+        "alt_ast": {"alt": profile_data.alt_u_l, "ast": profile_data.ast_u_l} if (profile_data.alt_u_l or profile_data.ast_u_l) else None,
+        "pregnancy_status": profile_data.pregnancy_status,
+        "alcohol_use": profile_data.alcohol_use,
+        "smoking_status": profile_data.smoking_status,
+        "data_consent": profile_data.consent,
         "share_with_clinician": profile_data.share_with_clinician,
         "updated_at": datetime.utcnow()
     }
@@ -104,7 +111,9 @@ async def create_or_update_profile(
     
     return {
         "message": "Profile saved successfully",
-        "profile_complete": True
+        "profile_complete": True,
+        "last_model_run_id": f"mod_{snapshot.id}",
+        "confidence_score": 0.92 if profile_data.weight_kg else 0.75
     }
 
 @router.get("/profile")

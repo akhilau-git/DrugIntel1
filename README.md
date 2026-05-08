@@ -50,7 +50,7 @@ By combining these models into one unified Pharma Intelligence Hub, your project
 
 **How it works**
 - **Email login** → `POST /api/v1/auth/login` → backend validates credentials, checks account status, returns short‑lived access JWT and rotating refresh token. If MFA required, return `mfa_required`. Frontend stores access token in memory and refresh token in httpOnly cookie.  
-- **Google OAuth** → OAuth returns `email`, `name`, `google_id`. If email exists, link identity; if new, create **Patient** account with minimal profile and show onboarding modal. **Google login cannot create professional roles**; elevation requires email sign‑up and manual verification.  
+- **Google OAuth** → OAuth returns `email`, `name`, `google_id`. If email exists, link identity; if new, create **Patient** account with minimal profile and show onboarding modal. **Google login cannot be used to bypass professional verification; role elevation requires manual verification and email/password credentials.**  
 - **Forgot password** → send email OTP, verify, allow reset; professionals require two‑step verification. Failed verification opens secure support ticket.  
 - **Sign out** → `POST /api/v1/auth/logout` invalidates tokens; global logout revokes all refresh tokens; optional Google revoke if user requests unlink.
 
@@ -77,7 +77,20 @@ By combining these models into one unified Pharma Intelligence Hub, your project
 - **Consent and Sharing**: Data consent checkbox; toggle to share with clinician.
 
 **How data is used**
-- Backend builds a **patient vector** mapping demographics, labs, meds, allergies, and lifestyle to model inputs. Models re‑run on save to produce DDI risk, ADMET summaries, and dose suggestions. Results shown with plain‑language explanations and confidence scores. All model runs are logged and versioned.
+- Backend builds a **patient vector** mapping demographics, labs, meds, allergies, and lifestyle to model inputs. Models re‑run on save to produce DDI risk, ADMET summaries, and dose suggestions. Results shown with plain‑language explanations and confidence scores. All model runs are logged and versioned. If critical lab values are missing, show **“Data incomplete — results less confident”** and display confidence score.
+
+**Patient → Model Input Mapping Table**
+| Profile field | Model input name | Type | Notes |
+|---|---:|---:|---|
+| DOB | `age_years` | integer | computed from DOB |
+| Sex/Gender | `sex` | enum | Male/Female/Other |
+| Weight (kg) | `weight_kg` | float | required for dosing |
+| eGFR | `egfr_ml_min_173m2` | float | if missing, model uses population default |
+| ALT/AST | `alt_u_l`, `ast_u_l` | float | optional |
+| Allergies | `allergy_list` | list[string] | used to filter drugs |
+| Current medications | `med_list` | list[{name, dose, freq}] | used for DDI graph |
+| Pregnancy | `pregnancy_status` | enum | affects contraindications |
+| Alcohol/Smoking | `alcohol_use`, `smoking_status` | enum | CYP modulation priors |
 
 **Versioning and audit**
 - Every save creates an immutable snapshot. Updates create new snapshots and log `user_id`, `field_changed`, `old_value`, `new_value`, `timestamp`, `ip`. Critical changes (meds, allergies, pregnancy) require confirmation modal and trigger re‑evaluation and alerts.
@@ -127,15 +140,24 @@ By combining these models into one unified Pharma Intelligence Hub, your project
 - **Authentication**: OAuth2 for Google; email/password with MFA for professionals.  
 - **Encryption**: AES‑256 at rest; TLS 1.3 in transit.  
 - **Key management**: HSM for encryption keys.  
-- **Token handling**: Short‑lived access JWTs; rotating refresh tokens in httpOnly cookies.  
+- **Token handling**: 
+  - Access token: **15 minutes**.
+  - Refresh token: **30 days** rotating; refresh token rotation on each use. Store in `httpOnly`, `Secure`, `SameSite=Strict` cookie.
+  - Device session TTL: **90 days** unless revoked.
 - **Monitoring**: SIEM, anomaly detection, intrusion detection.  
 - **Data minimization**: Pseudonymize for analytics; consent management for sharing.  
 - **Incident response**: Forced logout, token revocation, forensic logging.
+  - **Forced logout procedure**: Admin triggers `POST /api/v1/auth/force_logout?user_id={}` → revoke all refresh tokens, send email, set `must_reset_password=true`.
+  - **Breach playbook**: 1) Revoke tokens for affected users. 2) Rotate HSM keys if needed. 3) Notify affected users and regulators per policy. 4) Preserve forensic logs (append‑only) and start incident review.
+
+**Audit export format:** JSONL with fields: `event_type`, `user_id`, `role`, `ip`, `device_id`, `timestamp`, `payload_hash`, `model_version` (if model run).
 
 **Audit and compliance**
 - Append‑only audit store for auth events, profile changes, model runs, and exports. Exportable reports for GMP/FDA/EMA audits. Explainability artifacts (SHAP, GNNExplainer) stored with model version and input snapshot.
 
 **Key API endpoints (implementation ready)**
+*(See the [API Specification Artifact](api_specification.md) for the complete, production-ready API contracts including schemas, examples, and validation rules.)*
+
 | Endpoint | Purpose | Notes |
 |---|---:|---|
 | `POST /api/v1/auth/login` | Email/password login | Returns access token, refresh token, role |

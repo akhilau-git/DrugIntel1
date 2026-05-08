@@ -190,6 +190,7 @@ class Verification(Base):
     institution_name = Column(String(200), nullable=True)
     orcid = Column(String(50), nullable=True)
     employee_id = Column(String(100), nullable=True)
+    documents = Column(JSON, nullable=True)
     
     # Verification details
     status = Column(Enum(VerificationStatus), default=VerificationStatus.PENDING)
