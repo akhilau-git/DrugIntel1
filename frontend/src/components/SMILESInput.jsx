@@ -7,19 +7,13 @@ const EXAMPLES = {
     'Morphine': { smiles: 'OC1=CC2=C(C=C1OC)C3CC(=O)CCC3N(CC2)C', note: 'Opioid analgesic' },
     'Atorvastatin': { smiles: 'CC(C)c1c(C(=O)Nc2ccccc2F)c(-c2ccccc2)c(-c2ccc(F)cc2)n1CCC(O)CC(O)CC(=O)O', note: 'Cholesterol medication' },
 }
-const SOLVENTS = [
-    ['hexane', 'Hexane — non-polar'], ['toluene', 'Toluene'], ['dichloromethane', 'DCM'],
-    ['ethyl_acetate', 'Ethyl acetate (95%)'], ['acetone', 'Acetone'],
-    ['methanol', 'Methanol'], ['chloroform', 'Chloroform'],
-]
+
 
 export default function SMILESInput({ onAnalyze, loading }) {
     const [smiles1, setS1] = useState('')
     const [smiles2, setS2] = useState('')
     const [name1, setN1] = useState('')
     const [name2, setN2] = useState('')
-    const [solvent, setSolvent] = useState('ethyl_acetate')
-    const [spots, setSpots] = useState(1)
     const [showAdv, setShowAdv] = useState(false)
 
     function submit() {
@@ -27,9 +21,7 @@ export default function SMILESInput({ onAnalyze, loading }) {
         onAnalyze({
             smiles: smiles1.trim(),
             drug2_smiles: smiles2.trim() || null,
-            solvent, drug_name: name1,
-            num_spots: spots,
-            spot_intensities: spots === 1 ? [1.0] : Array(spots).fill(0).map((_, i) => i === 0 ? 1.0 : 0.3)
+            drug_name: name1
         })
     }
 
@@ -81,14 +73,6 @@ export default function SMILESInput({ onAnalyze, loading }) {
                     <input value={name1} onChange={e => setN1(e.target.value)}
                         placeholder="e.g., Experimental Compound A" style={{ width: '100%' }} />
                 </div>
-                <div>
-                    <label style={{ display: 'block', fontWeight: 600, marginBottom: 8, fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
-                        TLC Mobile Phase Setup
-                    </label>
-                    <select value={solvent} onChange={e => setSolvent(e.target.value)} style={{ width: '100%' }}>
-                        {SOLVENTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                    </select>
-                </div>
             </div>
 
             <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)', marginBottom: 24 }}>
@@ -120,13 +104,6 @@ export default function SMILESInput({ onAnalyze, loading }) {
                             <input value={name2} onChange={e => setN2(e.target.value)}
                                 placeholder="Target 2 Name (Optional)"
                                 style={{ width: '100%', border: '1px solid rgba(56, 189, 248, 0.3)' }} />
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', fontWeight: 600, marginBottom: 8, fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
-                                Artificial TLC Impurities (1 = pure, 2+ = contaminated)
-                            </label>
-                            <input type="number" min="1" max="6" value={spots}
-                                onChange={e => setSpots(+e.target.value)} style={{ width: 120, background: 'rgba(0,0,0,0.4)', textAlign: 'center', fontSize: 18, fontWeight: 'bold' }} />
                         </div>
                     </div>
                 </div>

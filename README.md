@@ -4,8 +4,7 @@ DrugIntel is an enterprise-grade platform that digitally simulates the entire li
 
 Instead of just predicting if two drugs interact, your platform:
 * **Clinically:** Predicts how single drugs, pairs, or complex multi-drug cocktails (polypharmacy) will interact inside the human body over a 24-hour period.
-* **In the Lab:** Digitally simulates wet-lab tests like Thin Layer Chromatography (TLC) and calculates molecular shelf-life.
-* **In the Factory:** Simulates manufacturing conditions to predict optimal chemical yields for mass production.
+* **In the Lab:** Digitally simulates molecular properties and predicts interactions.
 
 ## The AI, ML, and DL Models Used
 
@@ -22,8 +21,7 @@ We utilize a state-of-the-art **"Ensemble Architecture,"** combining Deep Learni
 
 ### Machine Learning (Traditional & Tree-Based)
 * **Gradient Boosting Classifier:** Used in the Drug-Drug Interaction (DDI) Model to classify severity.
-* **Random Forest Regressor:** Used in the TLC Simulator to predict Retardation factor ($R_f$) based on solvent polarity.
-* **XGBoost (Extreme Gradient Boosting):** The king of tabular data, utilized to predict precise industrial manufacturing yields (temperature, pressure, catalyst volume) for scaling production.
+* **XGBoost (Extreme Gradient Boosting):** Used for advanced tabular data prediction.
 
 ### Explainable AI (xAI)
 * **SHAP & GNNExplainer:** The trust layer. When a toxicity warning fires, these highlight the exact 3D molecular functional group causing the issue, so human experts can verify the logic.
@@ -33,7 +31,7 @@ We utilize a state-of-the-art **"Ensemble Architecture,"** combining Deep Learni
 By combining these models into one unified Pharma Intelligence Hub, your project achieves five major industry milestones:
 
 1. **Eliminates the "Polypharmacy Blind Spot":** Safely maps out treatments for patients taking 5+ medications simultaneously.
-2. **Massive Cost and Time Reduction:** Simulates TLC plates and manufacturing yields in-silico, skipping months of expensive physical wet-lab testing.
+2. **Massive Cost and Time Reduction:** Simulates properties in-silico, skipping months of expensive physical wet-lab testing.
 3. **Data-Driven "Go/No-Go" Decisions:** Gives decision-makers a single holistic score.
 4. **Audit-Ready Regulatory Compliance:** Uses GNNExplainer and SHAP to ensure the AI isn't a "black box," generating transparent reports required by the FDA.
 5. **Enterprise-Grade Safety & Security:** Protects patient safety while securing multi-billion-dollar corporate IP via strict Role-Based Access Control (RBAC).
@@ -125,7 +123,7 @@ By combining these models into one unified Pharma Intelligence Hub, your project
 - **Patient**: DDI checker, ADMET summary, personal history editor, export PDF.  
 - **Doctor**: Patient lookup (consented), clinical DDI engine, prescription assistant, clinical reports.  
 - **Pharmacist**: Dispensing assistant, DDI/ADMET checks, compounding guidance, stock integration.  
-- **Chemist**: Molecule input, virtual TLC, yield calculator, lab notebook.  
+- **Chemist**: Molecule input, lab notebook.  
 - **Research Scientist**: Model training metadata, datasets, explainability tools.  
 - **Auditor / QA**: Read‑only audit logs, explainability artifacts, compliance reports.  
 - **Admin / IT**: User management, verification queue, RBAC configuration, security logs.

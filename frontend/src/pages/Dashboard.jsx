@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import axios from 'axios'
 import SMILESInput from '../components/SMILESInput'
 import PropertyCard from '../components/PropertyCard'
-import TLCPlate from '../components/TLCPlate'
 import { InteractionPanel } from '../components/InteractionPanel'
 import PurityGauge from '../components/PurityGauge'
 import { DosagePanel } from '../components/DosagePanel'
@@ -54,7 +53,7 @@ export default function Dashboard() {
                     DrugIntel <span style={{ color: 'var(--primary)', WebkitTextFillColor: 'var(--primary)' }}>Platform</span>
                 </h1>
                 <p style={{ color: 'var(--text-muted)', fontSize: 18, maxWidth: 600, margin: '0 auto', lineHeight: 1.6 }}>
-                    Enter a SMILES sequence to engage the Deterministic Chemical Engine for complete molecular, TLC, and purity analysis.
+                    Enter a SMILES sequence to engage the Deterministic Chemical Engine for complete molecular, diagnostic, and purity analysis.
                 </p>
             </div>
 
@@ -97,7 +96,6 @@ export default function Dashboard() {
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: 24, marginTop: 24 }}>
-                        <div style={{ transitionDelay: '0.4s', animation: 'fadeInUp 0.6s ease-out both' }}><TLCPlate data={results.tlc} /></div>
                         <div style={{ transitionDelay: '0.5s', animation: 'fadeInUp 0.6s ease-out both' }}><DosagePanel data={results.dosage} /></div>
                     </div>
 

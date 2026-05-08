@@ -77,7 +77,6 @@ def include_optional_router(module_path: str, router_name: str, *, prefix: str, 
 
 include_optional_router("modules.smiles_parser", "router", prefix="/api/molecule", tags=["Molecule Analysis"])
 include_optional_router("modules.drug_interaction", "router", prefix="/api/interaction", tags=["Drug Interactions"])
-include_optional_router("modules.tlc_simulator", "router", prefix="/api/tlc", tags=["TLC Simulation"])
 include_optional_router("modules.purity_checker", "router", prefix="/api/purity", tags=["Purity & Quality"])
 include_optional_router("modules.dosage_calculator", "router", prefix="/api/dosage", tags=["Dosage"])
 include_optional_router("modules.discovery_pipeline", "router", prefix="/api/discovery", tags=["Discovery Pipeline"])
@@ -99,18 +98,6 @@ except ImportError as e:
     logger.warning(f"Dependencies failed to load: {e}")
 
 from pydantic import BaseModel
-
-class ManufacturingInput(BaseModel):
-    smiles: str
-    temp_c: float
-    pressure_atm: float
-    time_hrs: float
-
-@app.post("/api/manufacturing/simulate", tags=["Manufacturing Metrics"])
-async def simulate_manufacturing(data: ManufacturingInput):
-    from modules.manufacturing import simulate_batch_yield
-    return simulate_batch_yield(data.smiles, data.temp_c, data.pressure_atm, data.time_hrs)
-
 from database.db import get_db
 from database import models
 from fastapi import Depends
@@ -132,16 +119,12 @@ class FullAnalysisPayload(BaseModel):
     smiles: str
     drug2_smiles: Optional[str] = None
     polypharmacy_smiles: Optional[List[str]] = [] # For HGNN cascading toxicity engine
-    solvent: str = "ethyl_acetate"
     drug_name: Optional[str] = ""
-    num_spots: int = 1
-    spot_intensities: List[float] = [1.0]
 
 @app.post("/api/molecule/full-analysis", tags=["Aggregated Analysis"])
 async def full_analysis(data: FullAnalysisPayload):
     from modules.smiles_parser import analyze_molecule, SMILESInput
     from modules.discovery_pipeline import score_discovery, DiscoveryInput
-    from modules.tlc_simulator import simulate_tlc, TLCInput
     from modules.purity_checker import check_purity, PurityInput
     from modules.dosage_calculator import calc_dosage, DosageInput
     from modules.drug_interaction import check_interaction, DDIInput
@@ -149,20 +132,19 @@ async def full_analysis(data: FullAnalysisPayload):
     
     # 1. Run parsing synchronously to validate SMILES immediately
     try:
-        molecule_data = analyze_molecule(SMILESInput(smiles=data.smiles, solvent=data.solvent))
+        molecule_data = analyze_molecule(SMILESInput(smiles=data.smiles))
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": f"Invalid SMILES or parsing error: {e}"})
 
     # 2. Run remaining computations concurrently for performance using threads
     tasks = [
         asyncio.to_thread(score_discovery, DiscoveryInput(smiles=data.smiles)),
-        asyncio.to_thread(simulate_tlc, TLCInput(smiles=data.smiles, solvent=data.solvent)),
-        asyncio.to_thread(check_purity, PurityInput(smiles=data.smiles, num_spots_on_tlc=data.num_spots, spot_intensities=data.spot_intensities)),
+        asyncio.to_thread(check_purity, PurityInput(smiles=data.smiles)),
         asyncio.to_thread(calc_dosage, DosageInput(smiles=data.smiles)),
         asyncio.to_thread(lookup_pubchem, data.smiles)
     ]
     
-    discovery_data, tlc_data, purity_data, dosage_data, pubchem_data = await asyncio.gather(*tasks)
+    discovery_data, purity_data, dosage_data, pubchem_data = await asyncio.gather(*tasks)
     
     ddi_data = None
     if data.drug2_smiles:
@@ -189,7 +171,6 @@ async def full_analysis(data: FullAnalysisPayload):
         },
         "molecule": molecule_data,
         "discovery": discovery_data,
-        "tlc": tlc_data,
         "purity": purity_data,
         "dosage": dosage_data,
         "drug_interaction": ddi_data,
@@ -208,7 +189,6 @@ def root():
             "/api/molecule/analyze",
             "/api/molecule/full-analysis",
             "/api/interaction/check",
-            "/api/tlc/simulate",
             "/api/purity/check",
             "/api/dosage/calculate",
             "/api/discovery/score",

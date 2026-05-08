@@ -45,14 +45,7 @@ class DrugInteractionRecord(Base):
     confidence  = Column(Float)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
 
-class TLCRecord(Base):
-    __tablename__ = "tlc_records"
-    id          = Column(Integer, primary_key=True, index=True)
-    smiles      = Column(Text, nullable=False)
-    solvent     = Column(String(100))
-    rf_value    = Column(Float)
-    purity_pct  = Column(Float)
-    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+
 
 class User(Base):
     __tablename__ = "users"

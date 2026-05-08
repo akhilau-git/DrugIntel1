@@ -7,7 +7,6 @@ import html2canvas from 'html2canvas';
 import SMILESInput from '../components/SMILESInput';
 
 // Center Panel Component Imports
-import TLCPlate from '../components/TLCPlate';
 import { InteractionPanel } from '../components/InteractionPanel';
 import MoleculeViewer from '../components/MoleculeViewer';
 
@@ -17,7 +16,6 @@ import { DosagePanel } from '../components/DosagePanel';
 import { DiscoveryScore } from '../components/DiscoveryScore';
 
 // New Modules
-import ManufacturingSim from '../modules/ManufacturingSim';
 import EnterpriseRAG from '../modules/EnterpriseRAG';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
@@ -66,7 +64,7 @@ export default function MainWorkspace({ userProfile, onLogout }) {
                 <div style={{ display: 'flex', gap: 24 }}>
                     <div style={{ fontWeight: 800, fontSize: 20, color: '#fff', letterSpacing: '0.5px' }}>DI<span style={{color: '#3b82f6'}}>.Enterprise</span></div>
                     <div style={{ display: 'flex', gap: 6 }}>
-                        {['Discovery', 'Manufacturing', 'Enterprise RAG', 'Reports'].map(tab => (
+                        {['Discovery', 'Enterprise RAG', 'Reports'].map(tab => (
                             <button key={tab} 
                                 onClick={() => setActiveTab(tab)}
                                 style={{
@@ -140,7 +138,6 @@ export default function MainWorkspace({ userProfile, onLogout }) {
                             <h2 style={{ margin: '0 0 24px 0', fontSize: 18, color: '#f8fafc' }}>Interactive Workspace</h2>
                             {results ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                                    <TLCPlate data={results.tlc} />
                                     {results.drug_interaction && <InteractionPanel data={results.drug_interaction} />}
                                     <div style={{ height: 300, background: '#111827', borderRadius: 8, overflow: 'hidden' }}>
                                         <MoleculeViewer smiles={results.inputSmiles} />
@@ -169,7 +166,6 @@ export default function MainWorkspace({ userProfile, onLogout }) {
                     </>
                 )}
 
-                {activeTab === 'Manufacturing' && <ManufacturingSim smiles={results?.inputSmiles} />}
                 {activeTab === 'Enterprise RAG' && <EnterpriseRAG token={userProfile?.token} />}
                 {activeTab === 'Reports' && (
                     <div style={{ padding: 40, width: '100%', overflowY: 'auto' }}>

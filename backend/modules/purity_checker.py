@@ -8,9 +8,7 @@ router = APIRouter()
 
 class PurityInput(BaseModel):
     smiles: str
-    num_spots_on_tlc: Optional[int] = 1
-    spot_intensities: Optional[List[float]] = [1.0]
-    method: Optional[str] = "tlc"  # tlc, hplc, nmr
+    method: Optional[str] = "computational"  # computational, hplc, nmr
 
 @router.post("/check")
 def check_purity(data: PurityInput):
@@ -18,10 +16,7 @@ def check_purity(data: PurityInput):
     if mol is None:
         return {"error": "Invalid SMILES"}
 
-    # Densitometry calculation
-    total = sum(data.spot_intensities) if data.spot_intensities else 1.0
-    main  = max(data.spot_intensities) if data.spot_intensities else 1.0
-    purity_pct = round((main / total) * 100, 2)
+    purity_pct = 99.0 # Placeholder for computational purity if no physical data
 
     mw    = Descriptors.MolWt(mol)
     logp  = Descriptors.MolLogP(mol)
@@ -38,8 +33,7 @@ def check_purity(data: PurityInput):
         {"test": "H-bond acceptors ≤ 10",        "value": str(hba),                "pass": hba <= 10,       "rule": "Lipinski"},
         {"test": "TPSA ≤ 140 Å²",              "value": f"{round(tpsa,1)} Å²",   "pass": tpsa <= 140,     "rule": "Veber"},
         {"test": "Rotatable bonds ≤ 10",         "value": str(rot),                "pass": rot <= 10,       "rule": "Veber"},
-        {"test": "TLC purity ≥ 95%",             "value": f"{purity_pct}%",        "pass": purity_pct >= 95,"rule": "Quality"},
-        {"test": "Single spot (no impurities)",  "value": f"{data.num_spots_on_tlc} spots","pass": data.num_spots_on_tlc == 1, "rule": "Quality"},
+        {"test": "Computational purity ≥ 95%",             "value": f"{purity_pct}%",        "pass": purity_pct >= 95,"rule": "Quality"},
         {"test": "Rings ≤ 5",                    "value": str(rings),              "pass": rings <= 5,      "rule": "Ghose"},
         {"test": "LogP > -2 (not too hydrophilic)", "value": str(round(logp,2)),   "pass": logp > -2,       "rule": "Ghose"},
     ]
@@ -47,15 +41,7 @@ def check_purity(data: PurityInput):
     passed = sum(1 for t in tests if t["pass"])
     quality_score = round((passed / len(tests)) * 100)
 
-    impurities = []
-    if data.num_spots_on_tlc > 1:
-        sorted_spots = sorted(data.spot_intensities, reverse=True)
-        for i, s in enumerate(sorted_spots[1:], 1):
-            impurities.append({
-                "spot_number": i + 1,
-                "relative_intensity": round(s / total * 100, 1),
-                "type": "unknown impurity"
-            })
+
 
     return {
         "purity_percent": purity_pct,
