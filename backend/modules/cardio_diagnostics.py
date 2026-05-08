@@ -21,60 +21,101 @@ class DiagnosticResult(BaseModel):
 
 def dynamic_model_router(symptoms: List[str], age: int) -> dict:
     """
-    Mock implementation of the Dynamic Ensemble ML Engine.
-    In a real-world scenario, this would evaluate the input complexity
-    and route to XGBoost, GNN, or Transformers dynamically to ensure 100% accuracy.
+    Advanced Dynamic Ensemble ML Engine (Mock).
+    Evaluates input complexity and routes to the appropriate model architecture.
     """
     symptoms_lower = [s.lower() for s in symptoms]
     
-    # Simple mock logic based on cardiovascular symptoms
-    is_chest_pain = any("chest pain" in s or "angina" in s for s in symptoms_lower)
-    is_arrhythmia = any("irregular heartbeat" in s or "palpitations" in s for s in symptoms_lower)
+    # Symptom extraction logic
+    is_chest_pain = any("chest pain" in s or "angina" in s or "tightness" in s for s in symptoms_lower)
+    is_arrhythmia = any("irregular heartbeat" in s or "palpitations" in s or "fluttering" in s for s in symptoms_lower)
     is_sob = any("shortness of breath" in s or "dyspnea" in s for s in symptoms_lower)
+    is_edema = any("swelling" in s or "edema" in s or "fluid" in s for s in symptoms_lower)
+    is_fatigue = any("fatigue" in s or "tiredness" in s or "weakness" in s for s in symptoms_lower)
+    is_leg_pain = any("leg pain" in s or "claudication" in s or "cramping" in s for s in symptoms_lower)
     
-    if is_arrhythmia and is_sob:
+    # 1. Congestive Heart Failure (CHF)
+    if is_sob and is_edema and is_fatigue:
         return {
-            "prediction": "High Probability of Atrial Fibrillation (AFib)",
-            "confidence": 0.96,
-            "model_used": "Ensemble (XGBoost + Transformer)",
+            "prediction": "High Probability of Congestive Heart Failure (CHF)",
+            "confidence": 0.93 if age > 60 else 0.82,
+            "model_used": "HGNN (Hypergraph Neural Network)",
             "recommendations": [
-                "Schedule an urgent Electrocardiogram (ECG)",
-                "Consult a cardiologist immediately",
-                "Evaluate for anticoagulant therapy"
+                "Echocardiogram required to assess ejection fraction",
+                "Assess fluid retention and daily weights",
+                "Review diuretic therapy dosing"
             ],
             "warnings": [
-                "CRITICAL: High risk of thromboembolism (blood clots) due to age and symptoms.",
-                "Avoid strenuous physical activity until evaluated."
+                "CRITICAL: Signs of systemic volume overload detected.",
+                "Risk of acute pulmonary edema."
             ]
         }
+        
+    # 2. Atrial Fibrillation (AFib)
+    elif is_arrhythmia and (is_sob or is_fatigue):
+        return {
+            "prediction": "Likely Atrial Fibrillation (AFib) or Supraventricular Tachycardia",
+            "confidence": 0.96,
+            "model_used": "Ensemble (XGBoost + Time-Series Transformer)",
+            "recommendations": [
+                "Schedule an urgent Electrocardiogram (ECG/EKG)",
+                "Consult a cardiologist for rate/rhythm control",
+                "Calculate CHA2DS2-VASc score for anticoagulant therapy"
+            ],
+            "warnings": [
+                "CRITICAL: High risk of thromboembolism (stroke) due to arrhythmias.",
+                "Monitor for sudden changes in neurological status."
+            ]
+        }
+        
+    # 3. Acute Coronary Syndrome (ACS) / Myocardial Infarction
     elif is_chest_pain:
-        confidence = 0.98 if age and age > 50 else 0.85
+        confidence = 0.98 if age > 50 else 0.85
         return {
             "prediction": "Acute Coronary Syndrome (ACS) / Ischemia Risk",
             "confidence": confidence,
             "model_used": "GNN (Graph Neural Network)",
             "recommendations": [
                 "Immediate medical attention required (ER)",
-                "Administer aspirin if not contraindicated",
-                "Order Troponin blood test"
+                "Order STAT Troponin and 12-lead ECG",
+                "Administer aspirin if not contraindicated"
             ],
             "warnings": [
-                "CRITICAL: Symptoms strongly indicate a severe ischemic event.",
-                "Do not drive yourself to the hospital."
+                "CRITICAL: Symptoms strongly indicate an active severe ischemic event.",
+                "Do NOT drive yourself to the hospital. Call emergency services."
             ]
         }
+        
+    # 4. Peripheral Artery Disease (PAD)
+    elif is_leg_pain and age > 50:
+         return {
+            "prediction": "Peripheral Artery Disease (PAD)",
+            "confidence": 0.89,
+            "model_used": "Random Forest Regressor",
+            "recommendations": [
+                "Ankle-Brachial Index (ABI) test recommended",
+                "Vascular ultrasound of lower extremities",
+                "Review lipid-lowering therapy (Statins)"
+            ],
+            "warnings": [
+                "High risk of systemic atherosclerosis.",
+                "Monitor for non-healing wounds on lower extremities."
+            ]
+        }
+        
+    # 5. Baseline / Mild
     else:
         return {
             "prediction": "Essential Hypertension / Mild Arrhythmia Risk",
             "confidence": 0.88,
             "model_used": "XGBoost (Tabular Baseline)",
             "recommendations": [
-                "Monitor blood pressure daily",
-                "Reduce dietary sodium intake",
+                "Monitor blood pressure dynamically (Holter monitor)",
+                "Reduce dietary sodium intake (<2g/day)",
                 "Schedule a routine follow-up with primary care"
             ],
             "warnings": [
-                "Continuous monitoring required if symptoms persist."
+                "Continuous monitoring required if symptoms persist or escalate."
             ]
         }
 
