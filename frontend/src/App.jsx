@@ -6,6 +6,7 @@ import LoadingAssembly from './components/LoadingAssembly'
 import './index.css'
 import PatientDashboard from './pages/PatientDashboard'
 import DoctorDashboard from './pages/DoctorDashboard'
+import AdminDashboard from './pages/AdminDashboard'
 
 export default function App() {
     const [userProfile, setUserProfile] = useState(null)
@@ -52,6 +53,8 @@ export default function App() {
                                 ? <PatientDashboard userProfile={userProfile} onLogout={handleLogout} /> 
                                 : userProfile.role === 'doctor'
                                 ? <DoctorDashboard userProfile={userProfile} onLogout={handleLogout} />
+                                : (userProfile.role === 'auditor' || userProfile.role === 'admin')
+                                ? <AdminDashboard userProfile={userProfile} onLogout={handleLogout} />
                                 : <MainWorkspace userProfile={userProfile} onLogout={handleLogout} />
                         ) : <Navigate to="/" />
                     } />
