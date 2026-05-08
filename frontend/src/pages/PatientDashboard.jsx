@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import './patient/PatientDashboard.css';
 
 // Child components
-import QuickDDICard from './patient/QuickDDICard';
+import CardioSymptomTracker from './patient/CardioSymptomTracker';
+import DiagnosticResultPanel from './patient/DiagnosticResultPanel';
 import DDIResultPanel from './patient/DDIResultPanel';
 import MedicationList from './patient/MedicationList';
 import AdmetSnapshot from './patient/AdmetSnapshot';
@@ -22,6 +23,7 @@ export default function PatientDashboard({ userProfile, onLogout }) {
     { id: 1, name: 'Metformin', dose: '500 mg', frequency: 'Twice daily', route: 'Oral', startDate: '2025-10-01' }
   ]);
   const [ddiResult, setDdiResult] = useState(null);
+  const [diagnosisResult, setDiagnosisResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [alerts, setAlerts] = useState([
     { id: 1, severity: 'URGENT', message: 'Avoid combining Metformin and Cimetidine; contact clinician immediately.' }
@@ -30,6 +32,26 @@ export default function PatientDashboard({ userProfile, onLogout }) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   // ── Handlers ───────────────────────────────────────────────
+  async function handlePredict(data) {
+    setLoading(true);
+    try {
+      // Simulate API call to dynamic model router
+      setTimeout(() => {
+        setDiagnosisResult({
+          prediction: 'Likely Atrial Fibrillation (AFib)',
+          confidence: 0.94,
+          model_used: 'XGBoost + GNN Ensemble',
+          recommendations: ['Schedule ECG', 'Consult Cardiologist', 'Avoid high-sodium foods'],
+          warnings: ['High risk of blood clots due to age and symptoms']
+        });
+        setLoading(false);
+      }, 1500);
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
+    }
+  }
+
   async function handleRunCheck(meds) {
     setLoading(true);
     try {
@@ -143,13 +165,12 @@ export default function PatientDashboard({ userProfile, onLogout }) {
 
           {/* ── LEFT COLUMN (320px) ── */}
           <div className="pd-stagger" style={{display:'flex',flexDirection:'column',gap:24}}>
-            <QuickDDICard
-              medications={medications}
-              onRunCheck={handleRunCheck}
+            <CardioSymptomTracker
+              onPredict={handlePredict}
               loading={loading}
             />
-            <DDIResultPanel result={ddiResult} />
-            <MedicationList items={medications} onAdd={() => {}} />
+            {diagnosisResult && <DiagnosticResultPanel result={diagnosisResult} />}
+            <MedicationList items={medications} onAdd={() => {}} onRunCheck={handleRunCheck} />
           </div>
 
           {/* ── CENTER COLUMN (flex) ── */}
